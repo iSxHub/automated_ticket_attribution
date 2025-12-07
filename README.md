@@ -8,7 +8,7 @@ The goal is to:
 - Fetch the Service Catalog.
 - Use an LLM to classify tickets into `request_category`, `request_type`, and `sla`.
 - Export the final dataset to an Excel report.
-- Prepare the report to be sent via email.
+- Send the report via email.
 
 ---
 
@@ -23,17 +23,9 @@ The goal is to:
 ```text
 automated_ticket_attribution/
   app/
-    __init__.py
-    config.py
-    domain/
-      __init__.py
-      models.py
-    infrastructure/
-      __init__.py
-      helpdesk_client.py
-    application/
-      __init__.py
-      services.py           # use-cases
-  main.py                   # run the project
+    domain/                 # models
+    infrastructure/         # integrations
+    application/            # use-cases
+  main.py                   # run app
   requirements.txt
   README.md
