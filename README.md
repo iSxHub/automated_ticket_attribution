@@ -45,6 +45,14 @@ python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
 ```
+### local .env
+```bash
+HELPDESK_API_URL
+HELPDESK_API_KEY
+HELPDESK_API_SECRET
+SERVICE_CATALOG_URL
+GEMINI_API_KEY
+```
 --- 
 ## How to Run
 
