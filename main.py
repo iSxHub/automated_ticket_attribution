@@ -1,7 +1,7 @@
 import logging
 from app.config import load_helpdesk_config
 from app.infrastructure.helpdesk_client import HelpdeskClient, HelpdeskAPIError
-from app.application.services import HelpdeskService
+from app.application.helpdesk_services import HelpdeskService
 
 
 logger = logging.getLogger(__name__)

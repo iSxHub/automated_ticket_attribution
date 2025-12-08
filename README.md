@@ -11,13 +11,11 @@ The goal is to:
 - Send the report via email.
 
 ---
-
 ## Tech Stack
 
 - Python 3.10
 
 ---
-
 ## Project Structure
 
 ```text
@@ -28,4 +26,33 @@ automated_ticket_attribution/
     application/            # use-cases
   main.py                   # run app
   requirements.txt
+  requirements-dev.txt
+  Makefile
   README.md
+```
+---
+## Setup
+
+### prod
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+### dev
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt
+```
+--- 
+## How to Run
+
+From the project root:
+
+```bash
+make run        # run the app
+make test       # run unit tests (pytest)
+make lint       # lint with ruff
+make type-check # static type checking with mypy
+```
