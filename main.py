@@ -70,7 +70,7 @@ def main() -> None:
             continue
 
         logger.info(
-            "[part 3] LLM result for %s: category=%r type=%r sla=%r %r",
+            "[part 3 and 4] LLM result for %s: category=%r type=%r sla=%r %r",
             req.raw_id,
             result.request_category,
             result.request_type,

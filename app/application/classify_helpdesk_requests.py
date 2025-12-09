@@ -44,7 +44,7 @@ class ClassifyHelpdeskRequests:
                     )
                     # keep llm_result as None; only existing values (if any) will be used.
 
-            # merge existing values with LLM result back into the HelpdeskRequest object
+            # [part 4] merge existing values with LLM result back into the HelpdeskRequest object
             req.request_category = existing_cat or (
                 llm_result.request_category if llm_result else None
             )

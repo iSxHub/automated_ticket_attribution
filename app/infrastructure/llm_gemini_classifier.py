@@ -24,9 +24,10 @@ You receive:
 2) A single helpdesk request with a short description and raw payload.
 
 Your job:
-- Choose the best matching request_category and request_type from the Service Catalog.
+- request_category and request_type MUST be taken verbatim from the Service Catalog lines above.
 - Choose a reasonable SLA (unit + integer value) based on the catalog entries.
 - If the catalog already defines SLA for a chosen request type, use that SLA directly.
+- If nothing fits, use "Other/Uncategorized" for category and "General Inquiry/Undefined" for request_type.
 - If you are not sure, pick the closest match and still return a best-effort SLA.
 
 Rules:
