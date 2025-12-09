@@ -48,7 +48,7 @@ class LLMConfig:
     api_key: str
 
 def load_llm_config() -> LLMConfig:
-    model_name = os.getenv("LLM_MODEL_NAME", "gemini-2.0-flash-lite")
+    model_name = os.getenv("LLM_MODEL_NAME", "gemini-2.5-pro")
     api_key = _get_required_env("GEMINI_API_KEY")
 
     return LLMConfig(

@@ -8,9 +8,9 @@ from app.config import (
 )
 from app.infrastructure.service_catalog_client import ServiceCatalogClient, ServiceCatalogError
 from app.infrastructure.llm_classifier import LLMClassifier
-from app.application.llm_classifier import LLMClassificationError
 from app.infrastructure.excel import build_excel, ExcelReportError
-from app.domain.helpdesk import HelpdeskRequest
+from app.application.missing_sla import missing_sla
+from app.application.classify_requests import classify_requests
 
 
 logger = logging.getLogger(__name__)
@@ -63,31 +63,11 @@ def main() -> None:
     llm = LLMClassifier(llm_config)
 
     # classify all requests (even if not success by LLM) and log first 3 of them
-    classified_requests: list[HelpdeskRequest] = []
-    for idx, req in enumerate(requests_):
-        try:
-            result = llm.classify_helpdesk_request(req, service_catalog)
-        except LLMClassificationError as exc:
-            logger.error("LLM classification failed for %s: %s", req.raw_id, exc)
-        else:
-            req.request_category = result.request_category
-            req.request_type = result.request_type
-            req.sla_unit = result.sla_unit
-            req.sla_value = result.sla_value
-
-            if idx < 3:
-                logger.info(
-                    "[part 3 and 4] LLM result for %s: category=%r type=%r sla=%r %r",
-                    req.raw_id,
-                    result.request_category,
-                    result.request_type,
-                    result.sla_value,
-                    result.sla_unit,
-                )
-
-        classified_requests.append(req)
+    classified_requests = classify_requests(llm, service_catalog, requests_)
 
     # [part 5] build Excel file
+    missing_sla(classified_requests, service_catalog)
+
     try:
         excel_bytes = build_excel(classified_requests)
     except ExcelReportError as exc:
