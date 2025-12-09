@@ -14,6 +14,7 @@ from app.application.missing_sla import missing_sla
 from app.application.classify_requests import classify_requests
 from app.domain.helpdesk import HelpdeskRequest
 from app.domain.service_catalog import ServiceCatalog
+from datetime import datetime
 
 
 logger = logging.getLogger(__name__)
@@ -70,12 +71,17 @@ def _load_service_catalog(catalog_client: ServiceCatalogClient) -> ServiceCatalo
     )
     return service_catalog
 
-def _build_excel(classified_requests: list[HelpdeskRequest], output_path: str = "classified_helpdesk_requests.xlsx") -> None:
+def _build_excel(classified_requests: list[HelpdeskRequest], output_path: str | None = None) -> None:
     try:
         excel_bytes = build_excel(classified_requests)
     except ExcelReportError as exc:
         logger.error("Could not generate Excel report: %s", exc)
         return
+
+    if output_path is None:
+        now = datetime.now()
+        timestamp = now.strftime("%d-%m-%Y %H-%M-%S")
+        output_path = f"classified_requests_{timestamp}.xlsx"
 
     with open(output_path, "wb") as f:
         f.write(excel_bytes)

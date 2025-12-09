@@ -14,4 +14,4 @@ type-check:
 
 # Run the app
 run:
-	PYTHONPATH=. python main.py
+	PYTHONPATH=. python -m app.cmd.main
