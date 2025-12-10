@@ -68,3 +68,8 @@ make test       # run unit tests (pytest)
 make lint       # lint with ruff
 make type-check # static type checking with mypy
 ```
+## License
+
+Source-available, non-commercial.  
+You can read and run this code for evaluation, but you may not use it in production
+or for commercial purposes without my written permission.
