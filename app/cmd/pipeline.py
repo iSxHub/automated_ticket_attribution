@@ -15,6 +15,7 @@ from app.application.classify_requests import classify_requests
 from app.domain.helpdesk import HelpdeskRequest
 from app.domain.service_catalog import ServiceCatalog
 from datetime import datetime
+from app.cmd.spinner import Spinner
 
 
 logger = logging.getLogger(__name__)
@@ -37,8 +38,9 @@ def pipeline() -> None:
     llm_config = load_llm_config()
     llm = LLMClassifier(llm_config)
 
-    # classify all requests (even if not success by LLM) and log first 3 of them
-    classified_requests = classify_requests(llm, service_catalog, requests_)
+    # classify all requests (even if not success by LLM) and log first 3 of them (displaying spinner while requests in LLM in progress)
+    with Spinner("Classifying helpdesk requests with LLM"):
+        classified_requests = classify_requests(llm, service_catalog, requests_)
 
     # [part 5] build Excel file
     missing_sla(classified_requests, service_catalog)

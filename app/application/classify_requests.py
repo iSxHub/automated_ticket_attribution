@@ -5,11 +5,12 @@ from typing import Protocol, Mapping
 from app.domain.helpdesk import HelpdeskRequest
 from app.domain.service_catalog import ServiceCatalog
 from app.application.llm_classifier import LLMClassificationResult, LLMClassificationError
+from app.application.classify_requests_progress import _batches_progress
 
 
 logger = logging.getLogger(__name__)
 
-class BatchRequestClassifier(Protocol):
+class RequestClassifier(Protocol):
     def classify_batch(
         self,
         requests: list[HelpdeskRequest],
@@ -18,13 +19,14 @@ class BatchRequestClassifier(Protocol):
         ...
 
 
-def classify_requests(classifier: BatchRequestClassifier, service_catalog: ServiceCatalog, requests_: list[HelpdeskRequest], batch_size: int = 20, examples_to_log: int = 3) -> list[HelpdeskRequest]:
+def classify_requests(classifier: RequestClassifier, service_catalog: ServiceCatalog, requests_: list[HelpdeskRequest], batch_size: int = 20, examples_to_log: int = 3) -> list[HelpdeskRequest]:
     classified_requests: list[HelpdeskRequest] = []
     logged_examples = 0
 
-    for batch_start in range(0, len(requests_), batch_size):
-        batch = requests_[batch_start : batch_start + batch_size]
-
+    for batch_index, total_batches, batch_start, batch_end, batch in _batches_progress(
+            requests_,
+            batch_size,
+    ):
         try:
             batch_results = classifier.classify_batch(batch, service_catalog)
         except LLMClassificationError as exc:

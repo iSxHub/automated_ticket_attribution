@@ -42,7 +42,7 @@ def build_excel(requests: Iterable[HelpdeskRequest]) -> bytes:
         header_font = Font(bold=True, size=14)
         default_font = Font(size=14)
         header_fill = PatternFill(fill_type="solid", fgColor="FFC000")
-        border_side = Side(border_style="medium", color="000000")
+        border_side = Side(border_style="thin", color="000000")
         default_border = Border(
             left=border_side,
             right=border_side,
