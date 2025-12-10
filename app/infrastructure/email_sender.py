@@ -17,16 +17,26 @@ class SMTPSender:
     def __init__(self, config: EmailConfig) -> None:
         self._config = config
 
-    # send a single email with one attachment
-    def send_report_email(self, subject: str, body: str, attachment_path: Path) -> None:
-        if not attachment_path.is_file():
-            raise EmailSendError(f"Attachment does not exist: {attachment_path}")
+    # send a single email with one or more attachments
+    def send_report_email(
+        self,
+        subject: str,
+        body: str,
+        reports: list[Path],
+    ) -> None:
+        if not reports:
+            raise EmailSendError("No attachments provided for report email")
 
+        for report in reports:
+            if not report.is_file():
+                raise EmailSendError(f"Attachment does not exist: {report}")
+
+        total_size = sum(p.stat().st_size for p in reports)
         logger.info(
-            "Preparing email to %s with attachment %s (%d bytes)",
+            "Preparing email to %s with %d attachment(s) (total %d bytes)",
             self._config.recipient,
-            attachment_path,
-            attachment_path.stat().st_size,
+            len(reports),
+            total_size,
         )
 
         msg = EmailMessage()
@@ -35,21 +45,22 @@ class SMTPSender:
         msg["To"] = self._config.recipient
         msg.set_content(body)
 
-        mime_type, _ = mimetypes.guess_type(attachment_path.name)
-        if mime_type is None:
-            maintype, subtype = "application", "octet-stream"
-        else:
-            maintype, subtype = mime_type.split("/", 1)
+        for report in reports:
+            mime_type, _ = mimetypes.guess_type(report.name)
+            if mime_type is None:
+                maintype, subtype = "application", "octet-stream"
+            else:
+                maintype, subtype = mime_type.split("/", 1)
 
-        with attachment_path.open("rb") as f:
-            file_bytes = f.read()
+            with report.open("rb") as f:
+                file_bytes = f.read()
 
-        msg.add_attachment(
-            file_bytes,
-            maintype=maintype,
-            subtype=subtype,
-            filename=attachment_path.name,
-        )
+            msg.add_attachment(
+                file_bytes,
+                maintype=maintype,
+                subtype=subtype,
+                filename=report.name,
+            )
 
         logger.info(
             "Connecting to SMTP server %s:%s (TLS=%s)...",

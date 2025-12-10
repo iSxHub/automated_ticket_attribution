@@ -9,6 +9,7 @@ The goal is to:
 - Use an LLM to classify tickets into `request_category`, `request_type`, and `sla`.
 - Export the final dataset to an Excel report.
 - Send the report via email.
+- **PS**. Don’t fetch data or call the LLM if there are any unsent reports; resend all unsent reports instead.
 
 ---
 ## Tech Stack

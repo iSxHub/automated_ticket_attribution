@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# helpdesk
 @dataclass(frozen=True)
 class HelpdeskAPIConfig:
     url: str
@@ -12,6 +13,7 @@ class HelpdeskAPIConfig:
     api_secret: str
     timeout_seconds: float = 10.0
 
+# service catalog
 @dataclass(frozen=True)
 class ServiceCatalogConfig:
     url: str
@@ -41,7 +43,7 @@ def load_service_catalog_config() -> ServiceCatalogConfig:
         url=url,
     )
 
-# Gemini
+# LLM
 @dataclass(frozen=True)
 class LLMConfig:
     model_name: str
@@ -64,6 +66,7 @@ def load_llm_config() -> LLMConfig:
         batch_size=batch_size,
     )
 
+# email
 @dataclass
 class EmailConfig:
     smtp_host: str
@@ -103,3 +106,11 @@ def load_email_config() -> EmailConfig:
         recipient=recipient,
         candidate_name=candidate_name,
     )
+# db
+@dataclass(frozen=True)
+class ReportLogConfig:
+    db_path: str
+
+def load_report_log_config() -> ReportLogConfig:
+    db_path = os.getenv("REPORT_LOG_DB_PATH")
+    return ReportLogConfig(db_path=db_path)
