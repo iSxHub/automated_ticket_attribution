@@ -3,7 +3,7 @@ import logging
 from io import BytesIO
 from typing import Iterable, List, Any
 from openpyxl import Workbook
-from openpyxl.styles import Font
+from openpyxl.styles import Font, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 from app.domain.helpdesk import HelpdeskRequest
 from openpyxl.worksheet.worksheet import Worksheet
@@ -38,6 +38,18 @@ def build_excel(requests: Iterable[HelpdeskRequest]) -> bytes:
 
         ws.title = "Helpdesk Requests"
 
+        # styles
+        header_font = Font(bold=True, size=14)
+        default_font = Font(size=14)
+        header_fill = PatternFill(fill_type="solid", fgColor="FFC000")
+        border_side = Side(border_style="medium", color="000000")
+        default_border = Border(
+            left=border_side,
+            right=border_side,
+            top=border_side,
+            bottom=border_side,
+        )
+
         # define and write header
         headers = [
             "raw_id",
@@ -48,12 +60,6 @@ def build_excel(requests: Iterable[HelpdeskRequest]) -> bytes:
             "sla_unit",
         ]
         ws.append(headers)
-
-        # headers bold
-        header_font = Font(bold=True)
-        for col_idx in range(1, len(headers) + 1):
-            cell = ws.cell(row=1, column=col_idx)
-            cell.font = header_font
 
         # write data rows
         for req in sorted_requests:
@@ -67,6 +73,23 @@ def build_excel(requests: Iterable[HelpdeskRequest]) -> bytes:
                     req.sla_unit or "",
                 ]
             )
+
+        # apply styles
+        for row_idx, row in enumerate(
+                ws.iter_rows(
+                    min_row=1,
+                    max_row=ws.max_row,
+                    max_col=ws.max_column,
+                ),
+                start=1,
+        ):
+            for cell in row:
+                cell.border = default_border
+                if row_idx == 1:
+                    cell.font = header_font
+                    cell.fill = header_fill
+                else:
+                    cell.font = default_font
 
         # auto-fit by setting column width from max content length
         for column_cells in ws.columns:
