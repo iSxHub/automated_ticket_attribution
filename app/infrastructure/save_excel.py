@@ -8,7 +8,7 @@ from app.infrastructure.excel import build_excel, ExcelReportError
 
 logger = logging.getLogger(__name__)
 
-def save_excel(requests: list[HelpdeskRequest], output_path: str | None = None) -> str:
+def save_excel(requests: list[HelpdeskRequest], output_path: str | None = None, filename_prefix: str = "",) -> str:
     try:
         excel_bytes = build_excel(requests)
     except ExcelReportError as exc:
@@ -20,7 +20,7 @@ def save_excel(requests: list[HelpdeskRequest], output_path: str | None = None) 
     if output_path is None:
         now = datetime.now()
         timestamp = now.strftime("%d-%m-%Y %H-%M-%S")
-        filename = f"classified_requests_{timestamp}.xlsx"
+        filename = f"{filename_prefix}classified_requests_{timestamp}.xlsx"
         path = project_root / "output" / filename
     else:
         path = Path(output_path)

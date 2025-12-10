@@ -28,10 +28,9 @@ def _make_mock_requests() -> list[HelpdeskRequest]:
         ),
     ]
 
-
 def main() -> None:
     requests = _make_mock_requests()
-    save_excel(requests)
+    save_excel(requests, filename_prefix="example_")
 
 
 if __name__ == "__main__":
