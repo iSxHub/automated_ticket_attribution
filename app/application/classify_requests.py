@@ -19,14 +19,11 @@ class RequestClassifier(Protocol):
         ...
 
 
-def classify_requests(classifier: RequestClassifier, service_catalog: ServiceCatalog, requests_: list[HelpdeskRequest], batch_size: int = 20, examples_to_log: int = 3) -> list[HelpdeskRequest]:
+def classify_requests(classifier: RequestClassifier, service_catalog: ServiceCatalog, requests_: list[HelpdeskRequest], batch_size: int, examples_to_log: int = 3) -> list[HelpdeskRequest]:
     classified_requests: list[HelpdeskRequest] = []
     logged_examples = 0
 
-    for batch_index, total_batches, batch_start, batch_end, batch in _batches_progress(
-            requests_,
-            batch_size,
-    ):
+    for _, _, batch_start, _, batch in _batches_progress(requests_, batch_size):
         try:
             batch_results = classifier.classify_batch(batch, service_catalog)
         except LLMClassificationError as exc:
@@ -40,32 +37,38 @@ def classify_requests(classifier: RequestClassifier, service_catalog: ServiceCat
             classified_requests.extend(batch)
             continue
 
+        # compute end index once
+        batch_end_index = batch_start + len(batch) - 1
         logger.info(
             "[part 3 and 4] LLM batch classified %d requests (index %d..%d)",
             len(batch),
             batch_start,
-            batch_start + len(batch) - 1,
+            batch_end_index,
         )
 
         for req in batch:
             raw_id = req.raw_id or ""
             result = batch_results.get(raw_id)
-            if result is not None:
-                req.request_category = result.request_category
-                req.request_type = result.request_type
-                req.sla_unit = result.sla_unit
-                req.sla_value = result.sla_value
 
-                if logged_examples < examples_to_log:
-                    logger.info(
-                        "[part 3 and 4] LLM result for %s: category=%r type=%r sla=%r %r",
-                        req.raw_id,
-                        result.request_category,
-                        result.request_type,
-                        result.sla_value,
-                        result.sla_unit,
-                    )
-                    logged_examples += 1
+            if result is None:
+                classified_requests.append(req)
+                continue
+
+            req.request_category = result.request_category
+            req.request_type = result.request_type
+            req.sla_unit = result.sla_unit
+            req.sla_value = result.sla_value
+
+            if logged_examples < examples_to_log:
+                logger.info(
+                    "[part 3 and 4] LLM result for %s: category=%r type=%r sla=%r %r",
+                    req.raw_id,
+                    result.request_category,
+                    result.request_type,
+                    result.sla_value,
+                    result.sla_unit,
+                )
+                logged_examples += 1
 
             classified_requests.append(req)
 
