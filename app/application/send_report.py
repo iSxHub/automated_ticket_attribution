@@ -12,7 +12,8 @@ class ReportEmailSender(Protocol):
             self,
             subject: str,
             body: str,
-            attachments: list[Path]
+            attachments: list[Path],
+            html_body: str | None = None,
     ) -> None:
         ...
 
@@ -24,7 +25,7 @@ def send_report(
 ) -> None:
     subject = f"Automation Engineer interview - technical task - {candidate_name}"
 
-    body = build_email_body(
+    text_body, html_body = build_email_body(
         codebase_url=codebase_url,
         candidate_name=candidate_name,
     )
@@ -35,4 +36,9 @@ def send_report(
         len(attachment_paths),
     )
 
-    email_sender.send_report_email(subject, body, attachment_paths)
+    email_sender.send_report_email(
+        subject,
+        text_body,
+        attachment_paths,
+        html_body,
+    )

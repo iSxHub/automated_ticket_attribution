@@ -1,7 +1,8 @@
 from __future__ import annotations
+from html import escape
 
 
-def build_email_body(
+def build_text_email_body(
     codebase_url: str,
     candidate_name: str,
 ) -> str:
@@ -12,3 +13,80 @@ def build_email_body(
         "Best regards,\n"
         f"{candidate_name}\n"
     )
+
+def build_html_email_body(
+    codebase_url: str,
+    candidate_name: str,
+) -> str:
+    return f"""
+<html>
+  <body style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4;">
+    <p>Hi,</p>
+
+    <p>Please find attached the classified helpdesk requests report.</p>
+
+    <p><strong>Codebase:</strong> <a href="{escape(codebase_url)}">{escape(codebase_url)}</a></p>
+
+    <p><strong>Overview of the script:</strong></p>
+    <ul>
+      <li>Sends a request to <code>https://hooks.anler.tech/webhook/159e348a-173b-4c56-91ab-74dd89b4eef3</code> and retrieves the raw data for each <code>helpdesk_request</code>.</li>
+      <li>Fetches the Service Catalog from <code>https://pastebin.com/raw/aYcaLzki</code>.</li>
+      <li>All retrieved requests are sent to the LLM in batches of 30 records (batch size is configurable), with a 3-second delay between batches (also configurable).</li>
+      <li>Based on the ticket text and the Service Catalog, the LLM fills in <code>request_category</code>, <code>request_type</code>, and SLA (<code>unit</code> + <code>value</code>) for each record.</li>
+      <li>Using the enriched data, the script generates an Excel file with sorting and basic formatting.</li>
+      <li>The generated Excel file is sent to <code>infosec@taxdome.com</code> with the required email subject and a link to the code repository.</li>
+      <li>Additionally, there is logging of sent reports in a SQLite database: if there are previously unsent reports in the <code>output</code> folder, they are collected and sent in a single email before starting a new run. As long as there are unsent reports, the script does not call the Helpdesk API or the LLM.</li>
+    </ul>
+
+    <p><strong>Additionally:</strong></p>
+    <ul>
+      <li>All key stages of the pipeline are logged via the standard Python <code>logging</code> module (I ran it in PyCharm, logs are visible in the IDE terminal).</li>
+      <li>A simple console spinner is used to show progress while sending batches to the LLM.</li>
+      <li>The code is covered by unit tests (configuration, pipeline orchestration, report handling, LLM interaction, etc.).</li>
+      <li>The project follows a clean architecture (domain / application / infrastructure / entrypoint) and can be extended with additional data sources, use cases, or LLM clients.</li>
+      <li>The LLM used is <code>gemini-2.5-pro</code>.</li>
+    </ul>
+
+    <p><strong>Potential future improvements:</strong></p>
+    <ul>
+      <li>Wrap the current pipeline into a Docker container and run it on a schedule (cron / CI job).</li>
+      <li>Move configuration (URLs, keys, batch sizes, email recipients) into environment-based settings for different environments.</li>
+      <li>Add integration with other triggers: incoming email, chat, webhooks from the ticketing system, etc.</li>
+      <li>Implement a simple web interface (e.g. using Django) for:
+        <ul>
+          <li>manually triggering the pipeline,</li>
+          <li>viewing generated reports and their delivery status,</li>
+          <li>managing parameters (batch size, target recipients, LLM model in use).</li>
+        </ul>
+      </li>
+    </ul>
+
+    <p>The repository also includes a <code>DESIGN_NOTES.md</code> file, where I describe:</p>
+    <ul>
+      <li>how I interpret the Service Catalog (e.g. Jira/Salesforce vs Zoom),</li>
+      <li>how I handle repeated runs and unsent reports,</li>
+      <li>error handling and degradation behavior,</li>
+      <li>security/LLM considerations.</li>
+    </ul>
+
+    <p>This is the kind of clarification I would normally discuss with stakeholders in a real project.</p>
+
+    <p>Best regards,<br/>
+       {escape(candidate_name)}</p>
+  </body>
+</html>
+""".strip()
+
+def build_email_body(
+    codebase_url: str,
+    candidate_name: str,
+) -> tuple[str, str]:
+    text_body = build_text_email_body(
+        codebase_url=codebase_url,
+        candidate_name=candidate_name,
+    )
+    html_body = build_html_email_body(
+        codebase_url=codebase_url,
+        candidate_name=candidate_name,
+    )
+    return text_body, html_body

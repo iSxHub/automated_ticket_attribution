@@ -23,6 +23,7 @@ class SMTPSender:
         subject: str,
         body: str,
         reports: list[Path],
+        html_body: str | None = None,
     ) -> None:
         if not reports:
             raise EmailSendError("No attachments provided for report email")
@@ -44,6 +45,9 @@ class SMTPSender:
         msg["From"] = self._config.sender
         msg["To"] = self._config.recipient
         msg.set_content(body)
+
+        if html_body:
+            msg.add_alternative(html_body, subtype="html")
 
         for report in reports:
             mime_type, _ = mimetypes.guess_type(report.name)

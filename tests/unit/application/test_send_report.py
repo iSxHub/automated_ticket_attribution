@@ -5,15 +5,16 @@ from app.application.send_report import send_report
 
 class FakeReportEmailSender:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str, list[Path]]] = []
+        self.calls: list[tuple[str, str, list[Path], str | None]] = []
 
     def send_report_email(
         self,
         subject: str,
         body: str,
         attachments: list[Path],
+        html_body: str | None = None,
     ) -> None:
-        self.calls.append((subject, body, attachments))
+        self.calls.append((subject, body, attachments, html_body))
 
 def test_send_report(tmp_path: Path) -> None:
     # given
@@ -33,7 +34,8 @@ def test_send_report(tmp_path: Path) -> None:
 
     # then
     assert len(sender.calls) == 1
-    subject, body, attachments = sender.calls[0]
+
+    subject, body, attachments, html_body = sender.calls[0]
 
     assert subject == "Automation Engineer interview - technical task - John Doe"
     assert codebase_url in body
