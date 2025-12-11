@@ -5,6 +5,7 @@ import requests
 from requests import HTTPError, RequestException
 from app.config import ServiceCatalogConfig
 from app.domain.service_catalog import SLA, ServiceRequestType, ServiceCategory, ServiceCatalog
+import time
 
 
 logger = logging.getLogger(__name__)
@@ -18,9 +19,16 @@ class ServiceCatalogClient:
         ServiceCatalog domain objects.
         """
 
-    def __init__(self, config: ServiceCatalogConfig) -> None:
+    def __init__(
+        self,
+        config: ServiceCatalogConfig,
+        max_retries: int = 3,
+        backoff_factor: float = 0.5,
+    ) -> None:
         self._config = config
         self._session = requests.Session()
+        self._max_retries = max_retries
+        self._backoff_factor = backoff_factor
 
     def fetch_catalog(self) -> ServiceCatalog:
         """Download and parse the Service Catalog into domain models.
@@ -75,16 +83,45 @@ class ServiceCatalogClient:
     def _download_text(self) -> str:
         """Download the raw YAML text for the Service Catalog."""
 
-        try:
-            response = self._session.get(
-                self._config.url,
-                timeout=self._config.timeout_seconds,
-            )
-            response.raise_for_status()
-        except (HTTPError, RequestException) as exc:
-            msg = f"Error calling Service Catalog endpoint: {exc}"
+        # retry GET with exponential backoff on HTTP/network errors
+        response: requests.Response | None = None
+        last_exc: Exception | None = None
+
+        for attempt in range(1, self._max_retries + 1):
+            try:
+                response = self._session.get(
+                    self._config.url,
+                    timeout=self._config.timeout_seconds,
+                )
+                response.raise_for_status()
+                break
+            except (HTTPError, RequestException) as exc:
+                last_exc = exc
+                if attempt == self._max_retries:
+                    msg = (
+                        "Error calling Service Catalog endpoint after "
+                        f"{self._max_retries} attempts: {exc}"
+                    )
+                    logger.error(msg)
+                    raise ServiceCatalogError(msg) from exc
+
+                sleep_seconds = self._backoff_factor * (2 ** (attempt - 1))
+                logger.warning(
+                    "Service Catalog request failed on attempt %d/%d: %s; "
+                    "retrying in %.1f seconds",
+                    attempt,
+                    self._max_retries,
+                    exc,
+                    sleep_seconds,
+                )
+                time.sleep(sleep_seconds)
+
+        if response is None:
+            msg = "Service Catalog request failed without a response object"
             logger.error(msg)
-            raise ServiceCatalogError(msg) from exc
+            if last_exc is not None:
+                raise ServiceCatalogError(msg) from last_exc
+            raise ServiceCatalogError(msg)
 
         text = response.text
         logger.debug("Raw Service Catalog response length=%d", len(text))

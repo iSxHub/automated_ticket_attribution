@@ -5,6 +5,7 @@ import requests
 from requests import HTTPError, RequestException
 from app.config import HelpdeskAPIConfig
 from app.domain.helpdesk import HelpdeskRequest
+import time
 
 
 logger = logging.getLogger(__name__)
@@ -18,9 +19,16 @@ class HelpdeskClient:
         maps the response into HelpdeskRequest domain objects.
         """
 
-    def __init__(self, config: HelpdeskAPIConfig) -> None:
+    def __init__(
+        self,
+        config: HelpdeskAPIConfig,
+        max_retries: int = 3,
+        backoff_factor: float = 0.5,
+    ) -> None:
         self._config = config
         self._session = requests.Session()
+        self._max_retries = max_retries
+        self._backoff_factor = backoff_factor
 
     def _post_json(self) -> Any:
         """Call the Helpdesk API and return the parsed JSON body.
@@ -33,17 +41,46 @@ class HelpdeskClient:
             "api_secret": self._config.api_secret,
         }
 
-        try:
-            response = self._session.post(
-                self._config.url,
-                json=payload,
-                timeout=self._config.timeout_seconds,
-            )
-            response.raise_for_status()
-        except (HTTPError, RequestException) as exc:
-            msg = f"Error calling Helpdesk API: {exc}"
+        # retry POST with exponential backoff on HTTP/network errors
+        response: requests.Response | None = None
+        last_exc: Exception | None = None
+
+        for attempt in range(1, self._max_retries + 1):
+            try:
+                response = self._session.post(
+                    self._config.url,
+                    json=payload,
+                    timeout=self._config.timeout_seconds,
+                )
+                response.raise_for_status()
+                break
+            except (HTTPError, RequestException) as exc:
+                last_exc = exc
+                if attempt == self._max_retries:
+                    msg = (
+                        f"Error calling Helpdesk API after {self._max_retries} "
+                        f"attempts: {exc}"
+                    )
+                    logger.error(msg)
+                    raise HelpdeskAPIError(msg) from exc
+
+                sleep_seconds = self._backoff_factor * (2 ** (attempt - 1))
+                logger.warning(
+                    "Helpdesk API call failed on attempt %d/%d: %s; "
+                    "retrying in %.1f seconds",
+                    attempt,
+                    self._max_retries,
+                    exc,
+                    sleep_seconds,
+                )
+                time.sleep(sleep_seconds)
+
+        if response is None:
+            msg = "Helpdesk API call failed without a response object"
             logger.error(msg)
-            raise HelpdeskAPIError(msg) from exc
+            if last_exc is not None:
+                raise HelpdeskAPIError(msg) from last_exc
+            raise HelpdeskAPIError(msg)
 
         try:
             return response.json()
