@@ -16,6 +16,7 @@ from app.cmd.pipeline_helpers import (
     _collect_unsent_reports,
 )
 from dataclasses import dataclass
+from app.infrastructure.excel import ExcelReportError
 
 
 logger = logging.getLogger(__name__)
@@ -76,7 +77,11 @@ def run_pipeline(deps: PipelineDeps, explicit_report_path: str | None = None) ->
 
     # [part 5] build Excel file
     missing_sla(classified_requests, service_catalog)
-    excel_path_str = save_excel(classified_requests)
+    try:
+        excel_path_str = save_excel(classified_requests)
+    except ExcelReportError as exc:
+        logger.error("Aborting pipeline: failed to save Excel report: %s", exc)
+        return
 
     _log_sample_requests(requests_)
 

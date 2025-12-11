@@ -12,8 +12,8 @@ def save_excel(requests: list[HelpdeskRequest], output_path: str | None = None, 
     try:
         excel_bytes = build_excel(requests)
     except ExcelReportError as exc:
-        logger.error("Could not generate Excel report: %s", exc)
-        return ""
+        logger.error("Could not generate Excel report", exc_info=exc)
+        raise
 
     project_root = Path(__file__).resolve().parent.parent.parent
 
