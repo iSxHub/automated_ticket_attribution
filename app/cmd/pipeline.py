@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 from app.infrastructure.helpdesk_client import HelpdeskClient
 from app.application.helpdesk_services import HelpdeskService
-from app.config import (
+from app.infrastructure.config_loader import (
     load_helpdesk_config,
     load_service_catalog_config,
     load_llm_config,

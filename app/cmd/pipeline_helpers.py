@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 from app.infrastructure.helpdesk_client import HelpdeskAPIError
 from app.application.helpdesk_services import HelpdeskService
-from app.config import load_email_config
+from app.infrastructure.config_loader import load_email_config
 from app.infrastructure.service_catalog_client import ServiceCatalogClient, ServiceCatalogError
 from app.domain.helpdesk import HelpdeskRequest
 from app.domain.service_catalog import ServiceCatalog
