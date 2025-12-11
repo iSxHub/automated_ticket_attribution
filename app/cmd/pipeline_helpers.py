@@ -54,7 +54,14 @@ def _send_report(
     email_config = load_email_config()
     email_sender = SMTPSender(email_config)
 
-    attachment_paths = _resolve_report_paths(report_path)
+    try:
+        attachment_paths = _resolve_report_paths(report_path)
+    except FileNotFoundError as exc:
+        logger.error(
+            "Cannot send report email because an attachment file is missing: %s",
+            exc,
+        )
+        raise SystemExit(1) from exc
 
     send_report(
         email_sender=email_sender,
