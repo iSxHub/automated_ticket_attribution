@@ -1,24 +1,14 @@
 from __future__ import annotations
 import logging
 from pathlib import Path
-from typing import Protocol
 from app.application.ports.email_body_builder_port import EmailBodyBuilder
+from app.application.ports.report_email_sender_port import ReportEmailSenderPort
 
 
 logger = logging.getLogger(__name__)
 
-class ReportEmailSender(Protocol):
-    def send_report_email(
-            self,
-            subject: str,
-            body: str,
-            attachments: list[Path],
-            html_body: str | None = None,
-    ) -> None:
-        ...
-
 def send_report(
-    email_sender: ReportEmailSender,
+    email_sender: ReportEmailSenderPort,
     body_builder: EmailBodyBuilder,
     attachment_paths: list[Path],
     codebase_url: str,

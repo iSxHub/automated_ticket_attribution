@@ -23,7 +23,7 @@ def _make_client_with_mock_session(json_payload: Any) -> HelpdeskClient:
 
     mock_session.post = Mock(return_value=mock_response)
 
-    client._session = mock_session                                              # type: ignore[attr-defined]
+    client._session = mock_session                                                                                          # type: ignore[attr-defined]
     return client
 
 def test_fetch_requests_happy_path() -> None:
@@ -89,7 +89,7 @@ def test_http_error_is_wrapped_in_helpdesk_api_error() -> None:
     mock_response.raise_for_status.side_effect = HTTPError("404 not found")
     mock_session.post.return_value = mock_response
 
-    client._session = mock_session                                                  # type: ignore[attr-defined]
+    client._session = mock_session                                                                                          # type: ignore[attr-defined]
 
     with pytest.raises(HelpdeskAPIError):
         _ = client.fetch_requests()
@@ -110,7 +110,7 @@ def test_json_error_is_wrapped_in_helpdesk_api_error() -> None:
     mock_response.json.side_effect = ValueError("invalid json")
 
     mock_session.post.return_value = mock_response
-    client._session = mock_session                                                  # type: ignore[attr-defined]
+    client._session = mock_session                                                                                          # type: ignore[attr-defined]
 
     with pytest.raises(HelpdeskAPIError):
         _ = client.fetch_requests()

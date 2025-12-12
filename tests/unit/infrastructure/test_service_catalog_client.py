@@ -1,6 +1,5 @@
 from typing import Any
 from unittest.mock import Mock
-import builtins
 import pytest
 from requests import HTTPError
 from app.config import ServiceCatalogConfig
@@ -9,6 +8,7 @@ from app.infrastructure.service_catalog_client import (
     ServiceCatalogClient,
     ServiceCatalogError,
 )
+from app.shared.errors import ServiceCatalogLoadError
 
 
 def _make_client_with_mock_session(raw_text: str) -> ServiceCatalogClient:
@@ -66,8 +66,10 @@ service_catalog:
 
     client = _make_client_with_mock_session(yaml_text)
 
-    with pytest.raises(ServiceCatalogError):
+    with pytest.raises(ServiceCatalogLoadError) as excinfo:
         _ = client.fetch_catalog()
+
+    assert isinstance(excinfo.value.__cause__, ServiceCatalogError)
 
 
 def test_fetch_catalog_mapping_error_raises() -> None:
@@ -82,10 +84,31 @@ service_catalog:
 
     client = _make_client_with_mock_session(yaml_text)
 
-    with pytest.raises(ServiceCatalogError):
+    with pytest.raises(ServiceCatalogLoadError) as excinfo:
         _ = client.fetch_catalog()
 
-def test_http_error_is_wrapped_in_service_catalog_error() -> None:
+    assert isinstance(excinfo.value.__cause__, ServiceCatalogError)
+
+def test_parse_yaml_error_is_wrapped_in_service_catalog_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import yaml  # type: ignore[import]
+
+    config = ServiceCatalogConfig(
+        url="https://example.com/service-catalog",
+        timeout_seconds=5.0,
+    )
+    client = ServiceCatalogClient(config)
+
+    def fake_safe_load(_: str) -> Any:
+        raise yaml.YAMLError("bad yaml")                                                                                    # type: ignore[attr-defined]
+
+    monkeypatch.setattr("yaml.safe_load", fake_safe_load)
+
+    with pytest.raises(ServiceCatalogError):
+        _ = client._parse_yaml(":::")                                                                                       # type: ignore[attr-defined]
+
+def test_download_text_http_error_raises_service_catalog_error() -> None:
     config = ServiceCatalogConfig(
         url="https://example.com/service-catalog",
         timeout_seconds=5.0,
@@ -95,52 +118,9 @@ def test_http_error_is_wrapped_in_service_catalog_error() -> None:
 
     mock_session = Mock()
     mock_response = Mock()
-
     mock_response.raise_for_status.side_effect = HTTPError("500 server error")
     mock_session.get.return_value = mock_response
-
-    client._session = mock_session                                                  # type: ignore[attr-defined]
-
-    with pytest.raises(ServiceCatalogError):
-        _ = client.fetch_catalog()
-
-def test_parse_yaml_import_error_is_wrapped_in_service_catalog_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    config = ServiceCatalogConfig(
-        url="https://example.com/service-catalog",
-        timeout_seconds=5.0,
-    )
-    client = ServiceCatalogClient(config)
-
-    original_import = builtins.__import__
-
-    def fake_import(name: str, *args: Any, **kwargs: Any) -> Any:
-        if name == "yaml":
-            raise ImportError("PyYAML not installed")
-        return original_import(name, *args, **kwargs)
-
-    monkeypatch.setattr("builtins.__import__", fake_import)
+    client._session = mock_session                                                                                          # type: ignore[attr-defined]
 
     with pytest.raises(ServiceCatalogError):
-        _ = client._parse_yaml("service_catalog: {}")                               # type: ignore[attr-defined]
-
-
-def test_parse_yaml_error_is_wrapped_in_service_catalog_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import yaml                                                                     # type: ignore[import]
-
-    config = ServiceCatalogConfig(
-        url="https://example.com/service-catalog",
-        timeout_seconds=5.0,
-    )
-    client = ServiceCatalogClient(config)
-
-    def fake_safe_load(_: str) -> Any:
-        raise yaml.YAMLError("bad yaml")                                            # type: ignore[attr-defined]
-
-    monkeypatch.setattr("yaml.safe_load", fake_safe_load)
-
-    with pytest.raises(ServiceCatalogError):
-        _ = client._parse_yaml(":::")                                               # type: ignore[attr-defined]
+        _ = client._download_text()                                                                                         # type: ignore[attr-defined]

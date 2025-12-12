@@ -3,7 +3,6 @@ import logging
 from app.application.missing_helpdesk_sla import missing_sla
 from app.application.classify_helpdesk_requests import classify_requests
 from app.cmd.spinner import Spinner
-from app.infrastructure.save_excel import save_excel
 from pathlib import Path
 from app.cmd.pipeline_helpers import (
     _load_service_catalog,
@@ -12,10 +11,12 @@ from app.cmd.pipeline_helpers import (
     _collect_unsent_reports,
 )
 from dataclasses import dataclass
-from app.infrastructure.build_excel import ExcelReportError
 from app.application.ports.email_body_builder_port import EmailBodyBuilder
 from app.application.classify_helpdesk_requests import RequestClassifier
 from app.cmd.ports import ReportLogPort, ServiceCatalogClientPort, HelpdeskServicePort
+from app.application.ports.report_exporter_port import ReportExporterPort
+from app.application.ports.report_email_sender_port import ReportEmailSenderPort
+from app.shared.errors import ReportGenerationError, EmailSendError
 
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,10 @@ class PipelineDeps:
     report_log: ReportLogPort
     batch_size: int
     email_body_builder: EmailBodyBuilder
+    report_exporter: ReportExporterPort
+    email_sender: ReportEmailSenderPort
+    codebase_url: str
+    candidate_name: str
 
 def run_pipeline(deps: PipelineDeps, explicit_report_path: str | None = None) -> None:
     project_root = deps.project_root
@@ -47,7 +52,18 @@ def run_pipeline(deps: PipelineDeps, explicit_report_path: str | None = None) ->
             "Found %d unsent report(s); sending them without calling LLM",
             len(unsent_reports),
         )
-        _send_report(unsent_reports, report_log, deps.email_body_builder)
+        try:
+            _send_report(
+                unsent_reports,
+                report_log,
+                deps.email_body_builder,
+                deps.email_sender,
+                deps.codebase_url,
+                deps.candidate_name,
+            )
+        except EmailSendError as exc:
+            logger.error("Failed to send report email: %s", exc)
+            return
         return
 
     # if a specific report is already logged as sent — nothing to do
@@ -78,14 +94,23 @@ def run_pipeline(deps: PipelineDeps, explicit_report_path: str | None = None) ->
     # [part 5] build Excel file
     missing_sla(classified_requests, service_catalog)
     try:
-        excel_path_str = save_excel(classified_requests)
-    except ExcelReportError as exc:
-        logger.error("Aborting pipeline: failed to save Excel report: %s", exc)
+        report_path = deps.report_exporter.export(classified_requests)
+    except ReportGenerationError as exc:
+        logger.error("Aborting pipeline: failed to export report: %s", exc)
         return
 
     _log_sample_requests(requests_)
 
-    report_path = Path(excel_path_str).resolve()
-
     # [part 6] send the report to email
-    _send_report([report_path], report_log, deps.email_body_builder)
+    try:
+        _send_report(
+            [report_path],
+            report_log,
+            deps.email_body_builder,
+            deps.email_sender,
+            deps.codebase_url,
+            deps.candidate_name,
+        )
+    except EmailSendError as exc:
+        logger.error("Failed to send report email: %s", exc)
+        return

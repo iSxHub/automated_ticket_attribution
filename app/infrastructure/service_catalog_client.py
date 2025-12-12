@@ -6,6 +6,7 @@ from requests import HTTPError, RequestException
 from app.config import ServiceCatalogConfig
 from app.domain.service_catalog import SLA, ServiceRequestType, ServiceCategory, ServiceCatalog
 import time
+from app.shared.errors import ServiceCatalogLoadError
 
 
 logger = logging.getLogger(__name__)
@@ -36,49 +37,54 @@ class ServiceCatalogClient:
             the YAML structure does not match the expected schema.
             """
 
-        text = self._download_text()
-        data = self._parse_yaml(text)
-
         try:
-            categories_raw = data["service_catalog"]["catalog"]["categories"]
-        except (TypeError, KeyError) as exc:
-            msg = (
-                "Unexpected Service Catalog shape; "
-                "expected 'service_catalog.catalog.categories'"
+            text = self._download_text()
+            data = self._parse_yaml(text)
+
+            try:
+                categories_raw = data["service_catalog"]["catalog"]["categories"]
+            except (TypeError, KeyError) as exc:
+                msg = (
+                    "Unexpected Service Catalog shape; "
+                    "expected 'service_catalog.catalog.categories'"
+                )
+                logger.error("%s: %s", msg, exc)
+                raise ServiceCatalogError(msg) from exc
+
+            try:
+                categories: List[ServiceCategory] = []
+                for cat in categories_raw:
+                    name = cat["name"]
+                    requests_raw = cat["requests"]
+
+                    requests = [
+                        ServiceRequestType(
+                            name=req["name"],
+                            sla=SLA(
+                                unit=req["sla"]["unit"],
+                                value=int(req["sla"]["value"]),
+                            ),
+                        )
+                        for req in requests_raw
+                    ]
+
+                    categories.append(ServiceCategory(name=name, requests=requests))
+            except (KeyError, TypeError, ValueError) as exc:
+                msg = "Failed to map Service Catalog to domain models"
+                logger.error("%s: %s", msg, exc)
+                raise ServiceCatalogError(msg) from exc
+
+            catalog = ServiceCatalog(categories=categories)
+            logger.info(
+                "[part 2] Loaded Service Catalog: %d categories, %d total request types",
+                len(catalog.categories),
+                sum(len(c.requests) for c in catalog.categories),
             )
-            logger.error("%s: %s", msg, exc)
-            raise ServiceCatalogError(msg) from exc
-
-        try:
-            categories: List[ServiceCategory] = []
-            for cat in categories_raw:
-                name = cat["name"]
-                requests_raw = cat["requests"]
-
-                requests = [
-                    ServiceRequestType(
-                        name=req["name"],
-                        sla=SLA(
-                            unit=req["sla"]["unit"],
-                            value=int(req["sla"]["value"]),
-                        ),
-                    )
-                    for req in requests_raw
-                ]
-
-                categories.append(ServiceCategory(name=name, requests=requests))
-        except (KeyError, TypeError, ValueError) as exc:
-            msg = "Failed to map Service Catalog to domain models"
-            logger.error("%s: %s", msg, exc)
-            raise ServiceCatalogError(msg) from exc
-
-        catalog = ServiceCatalog(categories=categories)
-        logger.info(
-            "[part 2] Loaded Service Catalog: %d categories, %d total request types",
-            len(catalog.categories),
-            sum(len(c.requests) for c in catalog.categories),
-        )
-        return catalog
+            return catalog
+        except ServiceCatalogError as exc:
+            raise ServiceCatalogLoadError(str(exc)) from exc
+        except (RequestException, HTTPError, ValueError, TypeError, KeyError) as exc:
+            raise ServiceCatalogLoadError("Failed to load Service Catalog") from exc
 
     def _download_text(self) -> str:
         """Download the raw YAML text for the Service Catalog."""

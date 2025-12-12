@@ -6,14 +6,13 @@ import ssl
 from email.message import EmailMessage
 from pathlib import Path
 from app.config import EmailConfig
+from app.application.ports.report_email_sender_port import ReportEmailSenderPort
+from app.shared.errors import EmailSendError
 
 
 logger = logging.getLogger(__name__)
 
-class EmailSendError(RuntimeError):
-    """Raised when sending the report email fails."""
-
-class SMTPSender:
+class SMTPSender(ReportEmailSenderPort):
     def __init__(self, config: EmailConfig) -> None:
         self._config = config
 
@@ -22,21 +21,21 @@ class SMTPSender:
         self,
         subject: str,
         body: str,
-        reports: list[Path],
+        attachments: list[Path],
         html_body: str | None = None,
     ) -> None:
-        if not reports:
+        if not attachments:
             raise EmailSendError("No attachments provided for report email")
 
-        for report in reports:
+        for report in attachments:
             if not report.is_file():
                 raise EmailSendError(f"Attachment does not exist: {report}")
 
-        total_size = sum(p.stat().st_size for p in reports)
+        total_size = sum(p.stat().st_size for p in attachments)
         logger.info(
             "Preparing email to %s with %d attachment(s) (total %d bytes)",
             self._config.recipient,
-            len(reports),
+            len(attachments),
             total_size,
         )
 
@@ -49,7 +48,7 @@ class SMTPSender:
         if html_body:
             msg.add_alternative(html_body, subtype="html")
 
-        for report in reports:
+        for report in attachments:
             mime_type, _ = mimetypes.guess_type(report.name)
             if mime_type is None:
                 maintype, subtype = "application", "octet-stream"

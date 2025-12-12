@@ -1,11 +1,6 @@
 from __future__ import annotations
 import logging
-from app.infrastructure.helpdesk_client import HelpdeskAPIError
-from app.application.helpdesk_services import HelpdeskService
-from app.infrastructure.config_loader import load_email_config
-from app.infrastructure.service_catalog_client import ServiceCatalogError
 from app.domain.helpdesk import HelpdeskRequest
-from app.infrastructure.email_sender import SMTPSender
 from app.application.send_report import send_report
 from datetime import datetime
 from pathlib import Path
@@ -13,34 +8,19 @@ from typing import Iterable, Sequence
 from app.application.ports.email_body_builder_port import EmailBodyBuilder
 from app.cmd.ports import ReportLogPort, ServiceCatalogClientPort
 from app.domain.service_catalog import ServiceCatalog
+from app.application.ports.report_email_sender_port import ReportEmailSenderPort
+from app.shared.errors import ServiceCatalogLoadError
 
 
 logger = logging.getLogger(__name__)
 
-def _load_helpdesk_requests(service: HelpdeskService) -> Sequence[HelpdeskRequest]:
-    """Logs the number of successfully loaded requests.
-        On failure (when the underlying Helpdesk client raises HelpdeskAPIError),
-        logs an error and terminates the process with SystemExit(1).
-        """
-
-    try:
-        requests_ = service.load_helpdesk_requests()
-    except HelpdeskAPIError as exc:
-        logger.error("Failed to load helpdesk requests: %s", exc)
-        raise SystemExit(1) from exc
-
-    logger.info("Successfully loaded %d requests", len(requests_))
-    return requests_
-
 def _load_service_catalog(client: ServiceCatalogClientPort) -> ServiceCatalog:
     """Logs the number of categories in the loaded catalog.
-        On failure (when the underlying client raises ServiceCatalogError),
-        logs an error and terminates the process with SystemExit(1).
         """
 
     try:
         service_catalog = client.fetch_catalog()
-    except ServiceCatalogError as exc:
+    except ServiceCatalogLoadError as exc:
         logger.error("Failed to load Service Catalog: %s", exc)
         raise SystemExit(1) from exc
 
@@ -63,9 +43,12 @@ def _log_sample_requests(requests_: Sequence[HelpdeskRequest], limit: int = 5) -
         )
 
 def _send_report(
-    report_path: list[Path],
+    report_paths: list[Path],
     report_log: ReportLogPort,
     body_builder: EmailBodyBuilder,
+    email_sender: ReportEmailSenderPort,
+    codebase_url: str,
+    candidate_name: str,
 ) -> None:
     """Send one or more report files via email and mark them as sent.
 
@@ -79,11 +62,8 @@ def _send_report(
         the process with SystemExit(1).
         """
 
-    email_config = load_email_config()
-    email_sender = SMTPSender(email_config)
-
     try:
-        attachment_paths = _resolve_report_paths(report_path)
+        attachment_paths = _resolve_report_paths(report_paths)
     except FileNotFoundError as exc:
         logger.error(
             "Cannot send report email because an attachment file is missing: %s",
@@ -95,8 +75,8 @@ def _send_report(
         email_sender=email_sender,
         body_builder=body_builder,
         attachment_paths=attachment_paths,
-        codebase_url="https://github.com/Steaxy/automated_ticket_attribution",
-        candidate_name=email_config.candidate_name,
+        codebase_url=codebase_url,
+        candidate_name=candidate_name,
     )
 
     # mark the resolved paths as sent

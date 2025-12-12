@@ -14,6 +14,9 @@ from pathlib import Path
 from app.infrastructure.report_log import SQLiteReportLog
 from app.cmd.pipeline_service import run_pipeline, PipelineDeps
 from app.infrastructure.email_templates.email_body_builder import TemplateEmailBodyBuilder
+from app.infrastructure.report_exporter_excel import ExcelReportExporter
+from app.infrastructure.config_loader import load_email_config
+from app.infrastructure.email_sender import SMTPSender
 
 
 logger = logging.getLogger(__name__)
@@ -44,6 +47,13 @@ def _build_pipeline_deps() -> PipelineDeps:
     # email body builder (templates)
     email_body_builder = TemplateEmailBodyBuilder()
 
+    # email sender/config built
+    email_config = load_email_config()
+    email_sender = SMTPSender(email_config)
+
+    # report exporter adapter
+    report_exporter = ExcelReportExporter()
+
     return PipelineDeps(
         project_root=project_root,
         helpdesk_service=helpdesk_service,
@@ -52,6 +62,10 @@ def _build_pipeline_deps() -> PipelineDeps:
         report_log=report_log,
         batch_size=llm_config.batch_size,
         email_body_builder=email_body_builder,
+        report_exporter=report_exporter,
+        email_sender=email_sender,
+        codebase_url="https://github.com/Steaxy/automated_ticket_attribution",
+        candidate_name=email_config.candidate_name,
     )
 
 def pipeline(explicit_report_path: str | None = None) -> None:
