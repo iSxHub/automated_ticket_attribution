@@ -115,27 +115,8 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
 ```
 ### local .env
-```bash
-HELPDESK_API_URL
-HELPDESK_API_KEY
-HELPDESK_API_SECRET
-SERVICE_CATALOG_URL
-LLM_MODEL_NAME
-LLM_API_KEY
-LLM_BATCH_SIZE
-LLM_DELAY_BETWEEN_BATCHES
-LLM_TEMPERATURE
-LLM_TOP_P
-LLM_TOP_K
-EMAIL_SMTP_HOST
-EMAIL_SMTP_PORT
-EMAIL_USE_TLS
-EMAIL_USERNAME
-EMAIL_PASSWORD
-EMAIL_SENDER
-EMAIL_RECIPIENT
-CANDIDATE_NAME
-REPORT_LOG_DB_PATH
+```text
+rename env_local.example to .env and fill the values
 ```
 --- 
 ## How to Run

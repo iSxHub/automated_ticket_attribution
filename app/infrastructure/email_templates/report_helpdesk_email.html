@@ -13,7 +13,7 @@
       <li>All retrieved requests are sent to the LLM in batches of 30 records (batch size is configurable), with a 3-second delay between batches (also configurable).</li>
       <li>Based on the ticket text and the Service Catalog, the LLM fills in <code>request_category</code>, <code>request_type</code>, and SLA (<code>unit</code> + <code>value</code>) for each record.</li>
       <li>Using the enriched data, the script generates an Excel file with sorting and basic formatting.</li>
-      <li>The generated Excel file is sent to <code>infosec@taxdome.com</code> with the required email subject and a link to the code repository.</li>
+      <li>The generated Excel file is sent to <code>steaxtr@gmail.com</code> with the required email subject and a link to the code repository.</li>
       <li>Additionally, there is logging of sent reports in a SQLite database: if there are previously unsent reports in the <code>output</code> folder, they are collected and sent in a single email before starting a new run. As long as there are unsent reports, the script does not call the Helpdesk API or the LLM.</li>
     </ul>
 
