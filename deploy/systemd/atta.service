@@ -1,0 +1,10 @@
+[Unit]
+Description=Automated Ticket Attribution (one run)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/atta/current
+EnvironmentFile=/opt/atta/.env
+ExecStart=/opt/atta/venv/bin/python -m app.cmd.main

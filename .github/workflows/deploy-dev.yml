@@ -1,0 +1,88 @@
+name: deploy-dev
+
+on:
+  push:
+    tags:
+      - "*-dev"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure tag commit is on dev branch
+        run:
+          git fetch origin dev --depth=1
+          TAG_COMMIT="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
+          git merge-base --is-ancestor "${TAG_COMMIT}" origin/dev
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Quality gates
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          make lint
+          make type-check
+          make test
+
+      - name: Package source
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          tar \
+            --exclude='./.git' \
+            --exclude='./.venv' \
+            --exclude='./venv' \
+            --exclude='./output' \
+            --exclude='./__pycache__' \
+            --exclude='./.pytest_cache' \
+            --exclude='./.mypy_cache' \
+            --exclude='./.ruff_cache' \
+            -czf "atta-${TAG}.tar.gz" .
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload artifact to S3
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          BUCKET="${{ secrets.DEPLOY_BUCKET }}"
+          aws s3 cp "atta-${TAG}.tar.gz" "s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
+
+      - name: Deploy on EC2 via SSM Run Command
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          BUCKET="${{ secrets.DEPLOY_BUCKET }}"
+          INSTANCE_ID="${{ secrets.DEV_EC2_INSTANCE_ID }}"
+          S3_URI="s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
+          AWS_REGION="${{ secrets.AWS_REGION }}"
+
+          aws ssm send-command \
+            --instance-ids "${INSTANCE_ID}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy ATTA ${TAG}" \
+            --parameters commands="[
+              \"set -euo pipefail\",
+              \"export AWS_REGION='${AWS_REGION}'\",
+              \"export AWS_DEFAULT_REGION='${AWS_REGION}'\",
+              \"export TAG='${TAG}'\",
+              \"export S3_URI='${S3_URI}'\",
+              \"export SSM_PATH='/atta/dev'\",
+              \"cd /tmp\",
+              \"rm -rf /tmp/atta-deploy && mkdir -p /tmp/atta-deploy\",
+              \"aws s3 cp ${S3_URI} /tmp/atta-deploy/atta-${TAG}.tar.gz\",
+              \"tar -xzf /tmp/atta-deploy/atta-${TAG}.tar.gz -C /tmp/atta-deploy\",
+              \"bash /tmp/atta-deploy/deploy/ec2_deploy.sh\"
+            ]"

@@ -130,6 +130,12 @@ make lint       # lint with ruff
 make type-check # static type checking with mypy
 make excel      # build example excel file
 ```
+---
+## How to deploy on AWS EC2
+### Make this file executable locally (PyCharm terminal):
+```text
+chmod +x deploy/ec2_deploy.sh
+```
 ## License
 
 Source-available, non-commercial.  
