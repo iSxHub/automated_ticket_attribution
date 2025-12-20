@@ -15,12 +15,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Ensure tag commit is on dev branch
-        run:
-          git fetch origin dev --depth=1
-          TAG_COMMIT="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
-          git merge-base --is-ancestor "${TAG_COMMIT}" origin/dev
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch origin dev --prune
+
+          TAG_COMMIT="$(git rev-parse HEAD)"
+
+          git merge-base --is-ancestor "${TAG_COMMIT}" "origin/dev"
 
       - uses: actions/setup-python@v5
         with:

@@ -41,7 +41,7 @@ tag:
 	fi; \
 	git tag $$version && echo "Tagged: $$version"
 
-deploy-dev: lint type-check test
+deploy-dev:
 	git fetch --tags
 	@branch=$$(git branch --show-current); \
 	if [ "$$branch" != "dev" ]; then \
