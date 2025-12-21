@@ -141,4 +141,10 @@ STDERR="$(
 echo "----- SSM STATUS -----"
 echo "${STATUS} (ResponseCode=${RC})"
 echo "----- SSM STDOUT -----"
-echo "${STD
+echo "${STDOUT}"
+echo "----- SSM STDERR -----"
+echo "${STDERR}"
+
+if [[ "${STATUS}" != "Success" ]]; then
+  die "SSM command failed with status: ${STATUS}"
+fi
