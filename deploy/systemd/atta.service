@@ -16,8 +16,5 @@ ExecStartPre=/usr/bin/docker pull ${ATTA_IMAGE}
 
 ExecStart=/usr/bin/docker run --rm --name atta --env-file /opt/atta/.env -v /opt/atta/state/output:/app/output ${ATTA_IMAGE}
 
-Restart=on-failure
-RestartSec=10
-
 [Install]
 WantedBy=multi-user.target
