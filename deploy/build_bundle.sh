@@ -9,6 +9,9 @@ fi
 
 OUT="atta-${TAG}.tar.gz"
 
+# write tarball outside the source dir
+OUT_TMP="/tmp/${OUT}"
+
 EXCLUDES=(
   "./.git"
   "./.venv"
@@ -18,6 +21,7 @@ EXCLUDES=(
   "./.pytest_cache"
   "./.mypy_cache"
   "./.ruff_cache"
+  "./atta-*.tar.gz"
 )
 
 TAR_ARGS=()
@@ -25,6 +29,9 @@ for e in "${EXCLUDES[@]}"; do
   TAR_ARGS+=( "--exclude=${e}" )
 done
 
-echo "[bundle] building ${OUT}"
-tar "${TAR_ARGS[@]}" -czf "${OUT}" .
+echo "[bundle] building ${OUT_TMP}"
+tar "${TAR_ARGS[@]}" -czf "${OUT_TMP}" .
+
+# move into workspace only after tar is complete
+mv -f "${OUT_TMP}" "${OUT}"
 echo "[bundle] done: ${OUT}"
