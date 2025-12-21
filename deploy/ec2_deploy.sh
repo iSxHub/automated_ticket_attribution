@@ -132,8 +132,18 @@ fi
 
 sleep 1
 
+# check if the service to be active
 if ! sudo systemctl is-active --quiet atta.service; then
   echo "ERROR: atta.service is not active. Recent logs:" >&2
+  sudo systemctl status atta.service --no-pager -l >&2 || true
+  sudo journalctl -u atta.service -n 200 --no-pager >&2 || true
+  exit 1
+fi
+
+# ensure the expected container is actually running
+if ! sudo docker ps --format '{{.Names}}' | grep -qx "atta"; then
+  echo "ERROR: docker container 'atta' is not running." >&2
+  sudo docker ps -a >&2 || true
   sudo systemctl status atta.service --no-pager -l >&2 || true
   sudo journalctl -u atta.service -n 200 --no-pager >&2 || true
   exit 1

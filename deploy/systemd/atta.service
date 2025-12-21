@@ -1,10 +1,10 @@
 [Unit]
-Description=Automated Ticket Attribution (Docker, one run)
+Description=Automated Ticket Attribution (Docker, long-running idle)
 Wants=network-online.target docker.service
 After=network-online.target docker.service
 
 [Service]
-Type=oneshot
+Type=simple
 
 EnvironmentFile=/opt/atta/.env
 EnvironmentFile=/opt/atta/state/runtime.env
@@ -14,7 +14,13 @@ WorkingDirectory=/opt/atta
 ExecStartPre=-/usr/bin/docker rm -f atta
 ExecStartPre=/usr/bin/docker pull ${ATTA_IMAGE}
 
-ExecStart=/usr/bin/docker run --rm --name atta --env-file /opt/atta/.env -v /opt/atta/state/output:/app/output ${ATTA_IMAGE}
+ExecStart=/usr/bin/docker run --name atta --env-file /opt/atta/.env -v /opt/atta/state/output:/app/output ${ATTA_IMAGE} sh -lc "trap : TERM INT; sleep infinity & wait"
+
+ExecStop=/usr/bin/docker stop atta
+ExecStopPost=-/usr/bin/docker rm -f atta
+
+Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
