@@ -132,7 +132,7 @@ make excel      # build example excel file
 ```
 ---
 ## How to deploy on AWS EC2
-### Make this file executable locally (PyCharm terminal):
+### Make this file executable locally:
 ```text
 chmod +x deploy/ec2_deploy.sh
 ```

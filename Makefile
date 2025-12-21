@@ -1,8 +1,22 @@
-.PHONY: test lint type-check run
+.PHONY: test lint type-check run excel tag deploy-dev
+.PHONY: setup-ci test-ci ci
 
-# run unit tests
+# install deps exactly like CI (reusable locally and in workflows)
+setup-ci:
+	python -m pip install --upgrade pip
+	python -m pip install -r requirements.txt -r requirements-dev.txt
+
+# run unit tests (simple local run)
 test:
-	PYTHONPATH=. pytest
+	PYTHONPATH=. python -m pytest
+
+# CI tests that generate artifacts for upload
+test-ci:
+	mkdir -p reports
+	PYTHONPATH=. python -m pytest -q \
+		--junitxml=reports/junit.xml \
+		--cov=app \
+		--cov-report=xml:reports/coverage.xml
 
 # linter (ruff)
 lint:
@@ -11,6 +25,9 @@ lint:
 # static types (mypy)
 type-check:
 	PYTHONPATH=. mypy app
+
+# one command for CI/local parity
+ci: lint type-check test-ci
 
 # run the app
 run:

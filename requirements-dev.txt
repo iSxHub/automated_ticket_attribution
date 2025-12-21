@@ -13,3 +13,4 @@ mypy
 types-requests
 types-PyYAML
 types-openpyxl
+pytest-cov

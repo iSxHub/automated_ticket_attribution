@@ -9,9 +9,16 @@ permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONHASHSEED: "0"
 
     steps:
       - uses: actions/checkout@v4
@@ -24,21 +31,37 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin dev --prune
-          TAG_COMMIT="$(git rev-parse HEAD)"
-          git merge-base --is-ancestor "${TAG_COMMIT}" "origin/dev"
 
-      - uses: actions/setup-python@v5
+          TAG_COMMIT="$(git rev-parse HEAD)"
+          echo "[guard] tag=${GITHUB_REF_NAME} commit=${TAG_COMMIT}"
+          echo "[guard] verifying commit is contained in origin/dev..."
+
+          if ! git merge-base --is-ancestor "${TAG_COMMIT}" "origin/dev"; then
+            echo "::error::Tag ${GITHUB_REF_NAME} points to ${TAG_COMMIT}, which is NOT on origin/dev. Create the tag from dev." >&2
+            exit 1
+          fi
+
+      - name: Setup Python + deps
+        uses: ./.github/actions/setup-python-deps
         with:
           python-version: "3.10"
-          cache: "pip"
 
       - name: Quality gates
+        shell: bash
         run: |
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
-          make lint
-          make type-check
-          make test
+          set -euo pipefail
+          make ci
+
+      - name: Log deploy context
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "[deploy] tag=${GITHUB_REF_NAME}"
+          echo "[deploy] region=${{ vars.AWS_REGION }}"
+          echo "[deploy] ecr_repo=${{ vars.ECR_REPO }}"
+          echo "[deploy] bucket=${{ vars.DEPLOY_BUCKET }}"
+          echo "[deploy] instance=${{ vars.DEV_EC2_INSTANCE_ID }}"
+          echo "[deploy] ssm_path=${{ vars.SSM_PATH }}"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -58,9 +81,14 @@ jobs:
           ECR_REPO="${{ vars.ECR_REPO }}"
           : "${AWS_ACCOUNT_ID:?Missing vars.AWS_ACCOUNT_ID}"
           : "${ECR_REPO:?Missing vars.ECR_REPO}"
+          : "${AWS_REGION:?Missing vars.AWS_REGION}"
 
           ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
           IMAGE_URI="${ECR_REGISTRY}/${ECR_REPO}:${TAG}"
+
+          echo "[ecr] registry=${ECR_REGISTRY}"
+          echo "[ecr] repo=${ECR_REPO}"
+          echo "[ecr] image_uri=${IMAGE_URI}"
 
           aws ecr get-login-password --region "${AWS_REGION}" \
             | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
@@ -74,22 +102,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          chmod +x deploy/build_bundle.sh
+          deploy/build_bundle.sh "${GITHUB_REF_NAME}"
 
-          TAG="${GITHUB_REF_NAME}"
-          OUT="/tmp/atta-${TAG}.tar.gz"
-
-          tar \
-            --exclude='./.git' \
-            --exclude='./.venv' \
-            --exclude='./venv' \
-            --exclude='./output' \
-            --exclude='./__pycache__' \
-            --exclude='./.pytest_cache' \
-            --exclude='./.mypy_cache' \
-            --exclude='./.ruff_cache' \
-            -czf "${OUT}" .
-
-          mv "${OUT}" "atta-${TAG}.tar.gz"
+      - name: Upload deploy bundle artifact (optional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-bundle-${{ github.ref_name }}
+          path: atta-${{ github.ref_name }}.tar.gz
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload artifact to S3
         shell: bash
@@ -98,6 +120,8 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           BUCKET="${{ vars.DEPLOY_BUCKET }}"
           : "${BUCKET:?Missing vars.DEPLOY_BUCKET}"
+
+          echo "[s3] uploading bundle to s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
           aws s3 cp "atta-${TAG}.tar.gz" "s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
 
       - name: Deploy on EC2 via SSM Run Command (download bundle + run deploy + wait)
@@ -108,8 +132,10 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           INSTANCE_ID="${{ vars.DEV_EC2_INSTANCE_ID }}"
           AWS_REGION="${{ vars.AWS_REGION }}"
-          ATTA_IMAGE="${IMAGE_URI}"
           BUCKET="${{ vars.DEPLOY_BUCKET }}"
+
+          # Read from env populated in ECR step
+          ATTA_IMAGE="${IMAGE_URI}"
 
           # Optional repo var; fallback to /atta/dev
           SSM_PATH="${{ vars.SSM_PATH }}"
@@ -119,49 +145,21 @@ jobs:
 
           : "${INSTANCE_ID:?Missing vars.DEV_EC2_INSTANCE_ID}"
           : "${AWS_REGION:?Missing vars.AWS_REGION}"
-          : "${ATTA_IMAGE:?Missing IMAGE_URI env (Build step failed?) }"
+          : "${ATTA_IMAGE:?Missing IMAGE_URI env (Build step failed?)}"
           : "${BUCKET:?Missing vars.DEPLOY_BUCKET}"
 
-          export TAG AWS_REGION ATTA_IMAGE BUCKET SSM_PATH
+          echo "[ssm] instance=${INSTANCE_ID}"
+          echo "[ssm] region=${AWS_REGION}"
+          echo "[ssm] bucket=${BUCKET}"
+          echo "[ssm] ssm_path=${SSM_PATH}"
+          echo "[ssm] image=${ATTA_IMAGE}"
 
-          # Build JSON safely
-          PARAMS_JSON="$(python - <<'PY'
-          import json, os
-
-          tag = os.environ["TAG"]
-          aws_region = os.environ["AWS_REGION"]
-          atta_image = os.environ["ATTA_IMAGE"]
-          bucket = os.environ["BUCKET"]
-          ssm_path = os.environ["SSM_PATH"]
-
-          s3_uri = f"s3://{bucket}/atta/{tag}/atta-{tag}.tar.gz"
-
-          commands = [
-              "set -euo pipefail",
-              f"export TAG='{tag}'",
-              f"export AWS_REGION='{aws_region}'",
-              f"export AWS_DEFAULT_REGION='{aws_region}'",
-              f"export ATTA_IMAGE='{atta_image}'",
-              f"export SSM_PATH='{ssm_path}'",
-              "echo '[SSM] whoami='$(whoami)",
-              "echo '[SSM] TAG='${TAG}",
-              "echo '[SSM] ATTA_IMAGE='${ATTA_IMAGE}",
-              "echo '[SSM] SSM_PATH='${SSM_PATH}",
-              f"echo '[SSM] Download bundle: {s3_uri}'",
-
-              "WORK_DIR=\"/tmp/atta-deploy-${TAG}-$RANDOM\"",
-              "mkdir -p \"$WORK_DIR\"",
-              "cd \"$WORK_DIR\"",
-
-              f"aws s3 cp '{s3_uri}' bundle.tar.gz",
-              "tar -xzf bundle.tar.gz",
-
-              "chmod +x deploy/ec2_deploy.sh",
-              "./deploy/ec2_deploy.sh",
-          ]
-
-          print(json.dumps({"commands": commands}))
-          PY
+          PARAMS_JSON="$(python deploy/render_ssm_payload.py \
+            --tag "${TAG}" \
+            --aws-region "${AWS_REGION}" \
+            --atta-image "${ATTA_IMAGE}" \
+            --bucket "${BUCKET}" \
+            --ssm-path "${SSM_PATH}"
           )"
 
           COMMAND_ID="$(
@@ -176,23 +174,27 @@ jobs:
 
           echo "SSM CommandId=${COMMAND_ID}"
 
-          # waiter exits non-zero if Status=Failed, not let it kill the script before fetch stdout/stderr.
           aws ssm wait command-executed --command-id "${COMMAND_ID}" --instance-id "${INSTANCE_ID}" || true
 
           INVOCATION_JSON="$(
             aws ssm get-command-invocation \
               --command-id "${COMMAND_ID}" \
               --instance-id "${INSTANCE_ID}" \
-              --query '{Status:Status,Stdout:StandardOutputContent,Stderr:StandardErrorContent}' \
               --output json
           )"
 
-          echo "----- SSM INVOCATION (Status/Stdout/Stderr) -----"
-          echo "${INVOCATION_JSON}"
+          STATUS="$(python -c 'import json,sys; print(json.load(sys.stdin).get("Status",""))' <<< "${INVOCATION_JSON}")"
+          STDOUT="$(python -c 'import json,sys; print(json.load(sys.stdin).get("StandardOutputContent",""))' <<< "${INVOCATION_JSON}")"
+          STDERR="$(python -c 'import json,sys; print(json.load(sys.stdin).get("StandardErrorContent",""))' <<< "${INVOCATION_JSON}")"
 
-          STATUS="$(python -c 'import json,sys; print(json.load(sys.stdin)["Status"])' <<< "${INVOCATION_JSON}")"
+          echo "----- SSM STATUS -----"
+          echo "${STATUS}"
+          echo "----- SSM STDOUT -----"
+          echo "${STDOUT}"
+          echo "----- SSM STDERR -----"
+          echo "${STDERR}"
 
           if [[ "${STATUS}" != "Success" ]]; then
-            echo "SSM command failed with status: ${STATUS}" >&2
+            echo "::error::SSM command failed with status: ${STATUS}" >&2
             exit 1
           fi
