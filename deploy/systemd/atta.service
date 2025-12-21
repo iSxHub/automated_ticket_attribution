@@ -12,13 +12,9 @@ EnvironmentFile=/opt/atta/state/runtime.env
 WorkingDirectory=/opt/atta
 
 ExecStartPre=-/usr/bin/docker rm -f atta
-# ensure image is present even if pre-pull step was skipped
 ExecStartPre=/usr/bin/docker pull ${ATTA_IMAGE}
 
-ExecStart=/usr/bin/docker run --rm --name atta \
-  --env-file /opt/atta/.env \
-  -v /opt/atta/state/output:/app/output \
-  ${ATTA_IMAGE}
+ExecStart=/usr/bin/docker run --rm --name atta --env-file /opt/atta/.env -v /opt/atta/state/output:/app/output ${ATTA_IMAGE}
 
 Restart=on-failure
 RestartSec=10

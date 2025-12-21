@@ -111,19 +111,31 @@ echo "Install systemd unit..."
 sudo cp "${CURRENT_DIR}/deploy/systemd/atta.service" /etc/systemd/system/atta.service
 sudo test -f /etc/systemd/system/atta.service
 
+# normalize CRLF -> LF to avoid "Invalid argument"
+sudo sed -i 's/\r$//' /etc/systemd/system/atta.service
+
+# validate the unit file now (gives exact error line if broken)
+sudo systemd-analyze verify /etc/systemd/system/atta.service
+
 sudo systemctl daemon-reload
 
 # enable unit on boot
 sudo systemctl enable atta.service
 
-# optional but practical: run it now (oneshot)
 echo "Start (or restart) atta.service..."
-sudo systemctl restart atta.service
+if ! sudo systemctl restart atta.service; then
+  echo "ERROR: failed to restart atta.service" >&2
+  sudo systemctl status atta.service --no-pager -l >&2 || true
+  sudo journalctl -u atta.service -n 200 --no-pager >&2 || true
+  exit 1
+fi
+
 sleep 1
 
 if ! sudo systemctl is-active --quiet atta.service; then
   echo "ERROR: atta.service is not active. Recent logs:" >&2
-  sudo journalctl -u atta.service -n 120 --no-pager >&2 || true
+  sudo systemctl status atta.service --no-pager -l >&2 || true
+  sudo journalctl -u atta.service -n 200 --no-pager >&2 || true
   exit 1
 fi
 
