@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# safer permissions for generated artifacts
+umask 077
+
 TAG="${1:-${TAG:-}}"
 if [[ -z "${TAG}" ]]; then
   echo "Usage: $0 <tag>  (or set TAG env var)" >&2
@@ -22,6 +25,8 @@ EXCLUDES=(
   "./.mypy_cache"
   "./.ruff_cache"
   "./atta-*.tar.gz"
+  # avoid packing checksum files from previous runs
+  "./atta-*.tar.gz.sha256"
 )
 
 TAR_ARGS=()
@@ -35,3 +40,7 @@ tar "${TAR_ARGS[@]}" -czf "${OUT_TMP}" .
 # move into workspace only after tar is complete
 mv -f "${OUT_TMP}" "${OUT}"
 echo "[bundle] done: ${OUT}"
+
+# checksum for integrity verification on EC2
+sha256sum "${OUT}" > "${OUT}.sha256"
+echo "[bundle] checksum: ${OUT}.sha256"

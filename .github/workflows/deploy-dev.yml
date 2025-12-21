@@ -19,13 +19,19 @@ jobs:
     timeout-minutes: 45
     env:
       PYTHONHASHSEED: "0"
+
+      # define TAG once for the whole job (this workflow runs only on tags)
+      TAG: ${{ github.ref_name }}
+
       # expose AWS deployment inputs once for reuse across steps
       AWS_REGION: ${{ vars.AWS_REGION }}
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
       ECR_REPO: ${{ vars.ECR_REPO }}
       DEPLOY_BUCKET: ${{ vars.DEPLOY_BUCKET }}
       DEV_EC2_INSTANCE_ID: ${{ vars.DEV_EC2_INSTANCE_ID }}
-      SSM_PATH: ${{ vars.SSM_PATH }}
+
+      # default once here; empty/undefined vars.SSM_PATH becomes /atta/dev
+      SSM_PATH: ${{ vars.SSM_PATH || '/atta/dev' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -40,11 +46,11 @@ jobs:
           git fetch origin dev --prune
 
           TAG_COMMIT="$(git rev-parse HEAD)"
-          echo "[guard] tag=${GITHUB_REF_NAME} commit=${TAG_COMMIT}"
+          echo "[guard] tag=${TAG} commit=${TAG_COMMIT}"
           echo "[guard] verifying commit is contained in origin/dev..."
 
           if ! git merge-base --is-ancestor "${TAG_COMMIT}" "origin/dev"; then
-            echo "::error::Tag ${GITHUB_REF_NAME} points to ${TAG_COMMIT}, which is NOT on origin/dev. Create the tag from dev." >&2
+            echo "::error::Tag ${TAG} points to ${TAG_COMMIT}, which is NOT on origin/dev. Create the tag from dev." >&2
             exit 1
           fi
 
@@ -63,12 +69,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "[deploy] tag=${GITHUB_REF_NAME}"
+          echo "[deploy] tag=${TAG}"
           echo "[deploy] region=${AWS_REGION}"
           echo "[deploy] ecr_repo=${ECR_REPO}"
           echo "[deploy] bucket=${DEPLOY_BUCKET}"
           echo "[deploy] instance=${DEV_EC2_INSTANCE_ID}"
-          echo "[deploy] ssm_path=${SSM_PATH:-/atta/dev}"
+          # NEW: already defaulted at job env
+          echo "[deploy] ssm_path=${SSM_PATH}"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -79,13 +86,10 @@ jobs:
       - name: Build & push Docker image to ECR
         shell: bash
         run: |
-          # build and push image using shared job env vars
           set -euo pipefail
 
-          # NEW: define TAG from the pushed tag name (workflow is triggered by tag)
-          TAG="${GITHUB_REF_NAME}"
-          : "${TAG:?Missing TAG (GITHUB_REF_NAME)}"
-
+          # assert TAG exists (prevents unbound var explosions)
+          : "${TAG:?Missing TAG}"
           : "${AWS_ACCOUNT_ID:?Missing env AWS_ACCOUNT_ID}"
           : "${ECR_REPO:?Missing env ECR_REPO}"
           : "${AWS_REGION:?Missing env AWS_REGION}"
@@ -110,13 +114,16 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x deploy/build_bundle.sh
-          deploy/build_bundle.sh "${GITHUB_REF_NAME}"
+          deploy/build_bundle.sh "${TAG}"
 
       - name: Upload deploy bundle artifact (optional)
         uses: actions/upload-artifact@v4
         with:
           name: deploy-bundle-${{ github.ref_name }}
-          path: atta-${{ github.ref_name }}.tar.gz
+          # include checksum artifact too
+          path: |
+            atta-${{ github.ref_name }}.tar.gz
+            atta-${{ github.ref_name }}.tar.gz.sha256
           if-no-files-found: error
           retention-days: 7
 
@@ -124,17 +131,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          AWS_REGION="${AWS_REGION}"
-          BUCKET="${DEPLOY_BUCKET}"
-          : "${BUCKET:?Missing vars.DEPLOY_BUCKET}"
+          : "${TAG:?Missing TAG}"
           : "${AWS_REGION:?Missing vars.AWS_REGION}"
+          : "${DEPLOY_BUCKET:?Missing vars.DEPLOY_BUCKET}"
+
+          BUCKET="${DEPLOY_BUCKET}"
 
           echo "[s3] uploading bundle to s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
-          # NEW: explicit region
           aws --region "${AWS_REGION}" s3 cp \
             "atta-${TAG}.tar.gz" \
             "s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
+
+          # upload checksum next to the bundle
+          echo "[s3] uploading checksum to s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz.sha256"
+          aws --region "${AWS_REGION}" s3 cp \
+            "atta-${TAG}.tar.gz.sha256" \
+            "s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz.sha256"
 
       - name: Deploy on EC2 via SSM Run Command
         shell: bash
@@ -143,7 +155,7 @@ jobs:
 
           chmod +x deploy/ssm_deploy.sh
 
-          export TAG="${GITHUB_REF_NAME}"
+          export TAG="${TAG}"
           export INSTANCE_ID="${DEV_EC2_INSTANCE_ID}"
           export AWS_REGION="${AWS_REGION}"
           export BUCKET="${DEPLOY_BUCKET}"
@@ -151,14 +163,8 @@ jobs:
           # Read from env populated in ECR step
           export ATTA_IMAGE="${IMAGE_URI}"
 
-          # Optional repo var; fallback to /atta/dev
-          SSM_PATH="${{ vars.SSM_PATH }}"
-          if [[ -z "${SSM_PATH}" ]]; then
-            SSM_PATH="/atta/dev"
-          fi
-          # default the SSM path to dev when unset
-          SSM_PATH="${SSM_PATH:-/atta/dev}"
-          export SSM_PATH
+          # SSM_PATH already defaulted at job env level (no duplication here)
+          export SSM_PATH="${SSM_PATH}"
 
           : "${INSTANCE_ID:?Missing vars.DEV_EC2_INSTANCE_ID}"
           : "${AWS_REGION:?Missing vars.AWS_REGION}"
