@@ -6,30 +6,6 @@ die() {
   exit 1
 }
 
-json_field() {
-  local key="$1"
-
-  python - <<'PY' "${key}"
-import json
-import sys
-
-key = sys.argv[1]
-raw = sys.stdin.read()
-
-if not raw.strip():
-    print("")
-    sys.exit(0)
-
-try:
-    payload = json.loads(raw)
-except json.JSONDecodeError:
-    print("")
-    sys.exit(0)
-
-print(payload.get(key, ""))
-PY
-}
-
 TAG="${TAG:-}"
 INSTANCE_ID="${INSTANCE_ID:-}"
 AWS_REGION="${AWS_REGION:-}"
@@ -73,73 +49,96 @@ MAX_WAIT_SECONDS="${SSM_MAX_WAIT_SECONDS:-1800}"   # 30 min
 SLEEP_SECONDS="${SSM_POLL_SECONDS:-10}"
 
 START_TS="$(date +%s)"
-INVOCATION_JSON=""
-STATUS=""
 ITER=0
 
 while true; do
   ITER=$((ITER + 1))
 
-  if INVOCATION_JSON="$(aws --region "${AWS_REGION}" ssm get-command-invocation \
+  # query Status directly; handle InvocationDoesNotExist cleanly
+  STATUS="$(
+    aws --region "${AWS_REGION}" ssm get-command-invocation \
       --command-id "${COMMAND_ID}" \
       --instance-id "${INSTANCE_ID}" \
-      --output json 2>/dev/null)"; then
-
-    STATUS="$(json_field "Status" <<< "${INVOCATION_JSON}")"
-
-    # print progress every poll (so GH Actions doesn't look frozen)
-    NOW_TS="$(date +%s)"
-    ELAPSED="$((NOW_TS - START_TS))"
-    echo "[ssm] status=${STATUS:-unknown} elapsed=${ELAPSED}s"
-
-    # show tail of remote output while running (helps debug hangs)
-    if [[ "${STATUS}" != "Success" && "${STATUS}" != "Failed" && "${STATUS}" != "Cancelled" && "${STATUS}" != "TimedOut" ]]; then
-      if (( ITER % 3 == 0 )); then # every ~30s by default
-        OUT="$(json_field "StandardOutputContent" <<< "${INVOCATION_JSON}")"
-        ERR="$(json_field "StandardErrorContent" <<< "${INVOCATION_JSON}")"
-        if [[ -n "${OUT}" ]]; then
-          echo "----- remote stdout (tail) -----"
-          echo "${OUT}" | tail -n 30
-        fi
-        if [[ -n "${ERR}" ]]; then
-          echo "----- remote stderr (tail) -----"
-          echo "${ERR}" | tail -n 30
-        fi
-      fi
-    fi
-
-    case "${STATUS}" in
-      Success|Failed|Cancelled|TimedOut)
-        break
-        ;;
-    esac
-  fi
+      --query "Status" \
+      --output text 2>/dev/null || true
+  )"
 
   NOW_TS="$(date +%s)"
   ELAPSED="$((NOW_TS - START_TS))"
-  if (( ELAPSED >= MAX_WAIT_SECONDS )); then
-    echo "::error::SSM command did not finish within ${MAX_WAIT_SECONDS}s (last known status: ${STATUS:-unknown}). CommandId=${COMMAND_ID}" >&2
-    if [[ -n "${INVOCATION_JSON}" ]]; then
-      echo "----- LAST SSM INVOCATION JSON -----"
-      echo "${INVOCATION_JSON}"
+
+  if [[ -z "${STATUS}" || "${STATUS}" == "None" ]]; then
+    echo "[ssm] status=pending(elastic) elapsed=${ELAPSED}s"
+  else
+    echo "[ssm] status=${STATUS} elapsed=${ELAPSED}s"
+  fi
+
+  # print tail while running (helps debug hangs)
+  if [[ "${STATUS}" == "InProgress" || "${STATUS}" == "Pending" || -z "${STATUS}" || "${STATUS}" == "None" ]]; then
+    if (( ITER % 3 == 0 )); then
+      OUT="$(
+        aws --region "${AWS_REGION}" ssm get-command-invocation \
+          --command-id "${COMMAND_ID}" \
+          --instance-id "${INSTANCE_ID}" \
+          --query "StandardOutputContent" \
+          --output text 2>/dev/null || true
+      )"
+      ERR="$(
+        aws --region "${AWS_REGION}" ssm get-command-invocation \
+          --command-id "${COMMAND_ID}" \
+          --instance-id "${INSTANCE_ID}" \
+          --query "StandardErrorContent" \
+          --output text 2>/dev/null || true
+      )"
+
+      if [[ -n "${OUT}" && "${OUT}" != "None" ]]; then
+        echo "----- remote stdout (tail) -----"
+        echo "${OUT}" | tail -n 30
+      fi
+      if [[ -n "${ERR}" && "${ERR}" != "None" ]]; then
+        echo "----- remote stderr (tail) -----"
+        echo "${ERR}" | tail -n 30
+      fi
     fi
-    exit 1
+  fi
+
+  case "${STATUS}" in
+    Success|Failed|Cancelled|TimedOut)
+      break
+      ;;
+  esac
+
+  if (( ELAPSED >= MAX_WAIT_SECONDS )); then
+    die "SSM command did not finish within ${MAX_WAIT_SECONDS}s. CommandId=${COMMAND_ID}"
   fi
 
   sleep "${SLEEP_SECONDS}"
 done
 
-RC="$(json_field "ResponseCode" <<< "${INVOCATION_JSON}")"
-STDOUT="$(json_field "StandardOutputContent" <<< "${INVOCATION_JSON}")"
-STDERR="$(json_field "StandardErrorContent" <<< "${INVOCATION_JSON}")"
+RC="$(
+  aws --region "${AWS_REGION}" ssm get-command-invocation \
+    --command-id "${COMMAND_ID}" \
+    --instance-id "${INSTANCE_ID}" \
+    --query "ResponseCode" \
+    --output text
+)"
+
+STDOUT="$(
+  aws --region "${AWS_REGION}" ssm get-command-invocation \
+    --command-id "${COMMAND_ID}" \
+    --instance-id "${INSTANCE_ID}" \
+    --query "StandardOutputContent" \
+    --output text
+)"
+
+STDERR="$(
+  aws --region "${AWS_REGION}" ssm get-command-invocation \
+    --command-id "${COMMAND_ID}" \
+    --instance-id "${INSTANCE_ID}" \
+    --query "StandardErrorContent" \
+    --output text
+)"
 
 echo "----- SSM STATUS -----"
 echo "${STATUS} (ResponseCode=${RC})"
 echo "----- SSM STDOUT -----"
-echo "${STDOUT}"
-echo "----- SSM STDERR -----"
-echo "${STDERR}"
-
-if [[ "${STATUS}" != "Success" ]]; then
-  die "SSM command failed with status: ${STATUS}"
-fi
+echo "${STD
