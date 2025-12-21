@@ -19,13 +19,13 @@ runs:
     - id: run_ci
       shell: bash
       run: |
-        set -uo pipefail
-        set +e
-        make ci
-        rc=$?
-        set -e
-        echo "ci_exit_code=${rc}" >> "$GITHUB_OUTPUT"
-        exit 0
+        # run make ci and capture its exit code without disabling safety flags
+        set -euo pipefail
+        ci_exit_code=0
+        if ! make ci; then
+          ci_exit_code=$?
+        fi
+        echo "ci_exit_code=${ci_exit_code}" >> "$GITHUB_OUTPUT"
 
     # upload only when reports exist
     - name: Upload test reports

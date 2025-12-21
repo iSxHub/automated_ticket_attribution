@@ -6,6 +6,31 @@ die() {
   exit 1
 }
 
+# read a single field from a JSON payload passed via stdin
+json_field() {
+  local key="$1"
+
+  python - <<'PY' "${key}"
+import json
+import sys
+
+key = sys.argv[1]
+raw = sys.stdin.read()
+
+if not raw.strip():
+    print("")
+    sys.exit(0)
+
+try:
+    payload = json.loads(raw)
+except json.JSONDecodeError:
+    print("")
+    sys.exit(0)
+
+print(payload.get(key, ""))
+PY
+}
+
 # required inputs (from workflow)
 TAG="${TAG:-}"
 INSTANCE_ID="${INSTANCE_ID:-}"
@@ -61,7 +86,7 @@ while true; do
       --instance-id "${INSTANCE_ID}" \
       --output json 2>/dev/null)"; then
 
-    STATUS="$(python -c 'import json,sys; print(json.load(sys.stdin).get("Status",""))' <<< "${INVOCATION_JSON}")"
+    STATUS="$(json_field "Status" <<< "${INVOCATION_JSON}")"
 
     case "${STATUS}" in
       Success|Failed|Cancelled|TimedOut)
@@ -84,9 +109,9 @@ while true; do
   sleep "${SLEEP_SECONDS}"
 done
 
-RC="$(python -c 'import json,sys; print(json.load(sys.stdin).get("ResponseCode",""))' <<< "${INVOCATION_JSON}")"
-STDOUT="$(python -c 'import json,sys; print(json.load(sys.stdin).get("StandardOutputContent",""))' <<< "${INVOCATION_JSON}")"
-STDERR="$(python -c 'import json,sys; print(json.load(sys.stdin).get("StandardErrorContent",""))' <<< "${INVOCATION_JSON}")"
+RC="$(json_field "ResponseCode" <<< "${INVOCATION_JSON}")"
+STDOUT="$(json_field "StandardOutputContent" <<< "${INVOCATION_JSON}")"
+STDERR="$(json_field "StandardErrorContent" <<< "${INVOCATION_JSON}")"
 
 echo "----- SSM STATUS -----"
 echo "${STATUS} (ResponseCode=${RC})"

@@ -19,6 +19,13 @@ jobs:
     timeout-minutes: 45
     env:
       PYTHONHASHSEED: "0"
+      # expose AWS deployment inputs once for reuse across steps
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      ECR_REPO: ${{ vars.ECR_REPO }}
+      DEPLOY_BUCKET: ${{ vars.DEPLOY_BUCKET }}
+      DEV_EC2_INSTANCE_ID: ${{ vars.DEV_EC2_INSTANCE_ID }}
+      SSM_PATH: ${{ vars.SSM_PATH }}
 
     steps:
       - uses: actions/checkout@v4
@@ -57,31 +64,27 @@ jobs:
         run: |
           set -euo pipefail
           echo "[deploy] tag=${GITHUB_REF_NAME}"
-          echo "[deploy] region=${{ vars.AWS_REGION }}"
-          echo "[deploy] ecr_repo=${{ vars.ECR_REPO }}"
-          echo "[deploy] bucket=${{ vars.DEPLOY_BUCKET }}"
-          echo "[deploy] instance=${{ vars.DEV_EC2_INSTANCE_ID }}"
-          echo "[deploy] ssm_path=${{ vars.SSM_PATH }}"
+          echo "[deploy] region=${AWS_REGION}"
+          echo "[deploy] ecr_repo=${ECR_REPO}"
+          echo "[deploy] bucket=${DEPLOY_BUCKET}"
+          echo "[deploy] instance=${DEV_EC2_INSTANCE_ID}"
+          echo "[deploy] ssm_path=${SSM_PATH:-/atta/dev}"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Build & push Docker image to ECR
         shell: bash
         run: |
+          # build and push image using shared job env vars
           set -euo pipefail
 
-          TAG="${GITHUB_REF_NAME}"
-          AWS_REGION="${{ vars.AWS_REGION }}"
-
-          AWS_ACCOUNT_ID="${{ vars.AWS_ACCOUNT_ID }}"
-          ECR_REPO="${{ vars.ECR_REPO }}"
-          : "${AWS_ACCOUNT_ID:?Missing vars.AWS_ACCOUNT_ID}"
-          : "${ECR_REPO:?Missing vars.ECR_REPO}"
-          : "${AWS_REGION:?Missing vars.AWS_REGION}"
+          : "${AWS_ACCOUNT_ID:?Missing env AWS_ACCOUNT_ID}"
+          : "${ECR_REPO:?Missing env ECR_REPO}"
+          : "${AWS_REGION:?Missing env AWS_REGION}"
 
           ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
           IMAGE_URI="${ECR_REGISTRY}/${ECR_REPO}:${TAG}"
@@ -118,8 +121,8 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
-          AWS_REGION="${{ vars.AWS_REGION }}"
-          BUCKET="${{ vars.DEPLOY_BUCKET }}"
+          AWS_REGION="${AWS_REGION}"
+          BUCKET="${DEPLOY_BUCKET}"
           : "${BUCKET:?Missing vars.DEPLOY_BUCKET}"
           : "${AWS_REGION:?Missing vars.AWS_REGION}"
 
@@ -137,9 +140,9 @@ jobs:
           chmod +x deploy/ssm_deploy.sh
 
           export TAG="${GITHUB_REF_NAME}"
-          export INSTANCE_ID="${{ vars.DEV_EC2_INSTANCE_ID }}"
-          export AWS_REGION="${{ vars.AWS_REGION }}"
-          export BUCKET="${{ vars.DEPLOY_BUCKET }}"
+          export INSTANCE_ID="${DEV_EC2_INSTANCE_ID}"
+          export AWS_REGION="${AWS_REGION}"
+          export BUCKET="${DEPLOY_BUCKET}"
 
           # Read from env populated in ECR step
           export ATTA_IMAGE="${IMAGE_URI}"
@@ -149,6 +152,8 @@ jobs:
           if [[ -z "${SSM_PATH}" ]]; then
             SSM_PATH="/atta/dev"
           fi
+          # default the SSM path to dev when unset
+          SSM_PATH="${SSM_PATH:-/atta/dev}"
           export SSM_PATH
 
           : "${INSTANCE_ID:?Missing vars.DEV_EC2_INSTANCE_ID}"
@@ -156,5 +161,4 @@ jobs:
           : "${ATTA_IMAGE:?Missing IMAGE_URI env (Build step failed?)}"
           : "${BUCKET:?Missing vars.DEPLOY_BUCKET}"
 
-          # NEW: split logic out of YAML
           deploy/ssm_deploy.sh
