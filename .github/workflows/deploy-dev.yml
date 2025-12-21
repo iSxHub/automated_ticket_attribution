@@ -82,6 +82,10 @@ jobs:
           # build and push image using shared job env vars
           set -euo pipefail
 
+          # NEW: define TAG from the pushed tag name (workflow is triggered by tag)
+          TAG="${GITHUB_REF_NAME}"
+          : "${TAG:?Missing TAG (GITHUB_REF_NAME)}"
+
           : "${AWS_ACCOUNT_ID:?Missing env AWS_ACCOUNT_ID}"
           : "${ECR_REPO:?Missing env ECR_REPO}"
           : "${AWS_REGION:?Missing env AWS_REGION}"
