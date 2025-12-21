@@ -1,4 +1,4 @@
-# ATTA deploy (dev)
+# Automated Ticket Attribution (ATTA) deploy (dev)
 
 ## Tag convention
 Deploy workflow triggers on tags matching: `*-dev`

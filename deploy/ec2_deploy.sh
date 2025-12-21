@@ -84,10 +84,9 @@ render_env_from_ssm() {
   log "Render .env from Parameter Store path: ${SSM_PATH}"
   local env_tmp="/tmp/${APP_NAME}.env.${TAG}.$RANDOM"
 
-  cleanup() { sudo rm -f "${env_tmp}" >/dev/null 2>&1 || true; }
-  trap cleanup EXIT
+  # cleanup when function returns (env_tmp is still defined)
+  trap 'sudo rm -f "${env_tmp:-}" >/dev/null 2>&1 || true' RETURN
 
-  # explicit region
   aws --region "${AWS_REGION}" ssm get-parameters-by-path \
     --path "${SSM_PATH}" \
     --recursive \

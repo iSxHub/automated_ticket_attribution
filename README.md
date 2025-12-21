@@ -135,11 +135,14 @@ make excel      # build example excel file
 ### Make this file executable locally:
 ```text
 chmod +x deploy/ec2_deploy.sh
+chmod +x deploy/build_bundle.sh
+chmod +x deploy/ssm_deploy.sh
 ```
 ### Deploy dev
 ```text
 make deploy-dev
 ```
+More info about Deploy [`deploy/README.md`](deploy/README.md)
 ## License
 
 Source-available, non-commercial.  
