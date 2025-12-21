@@ -28,7 +28,6 @@ dump_service_logs() {
   sudo journalctl -u atta.service -n 200 --no-pager 2>&1 | sudo tee -a "${LOG_FILE}" >&2 || true
 }
 
-# accept args (workflow/SSM is the source of truth)
 TAG="${TAG:-}"
 SSM_PATH="${SSM_PATH:-/atta/dev}"
 ATTA_IMAGE="${ATTA_IMAGE:-}"
@@ -83,8 +82,6 @@ copy_bundle_to_release() {
 render_env_from_ssm() {
   log "Render .env from Parameter Store path: ${SSM_PATH}"
   local env_tmp="/tmp/${APP_NAME}.env.${TAG}.$RANDOM"
-
-  # cleanup when function returns (env_tmp is still defined)
   trap 'sudo rm -f "${env_tmp:-}" >/dev/null 2>&1 || true' RETURN
 
   aws --region "${AWS_REGION}" ssm get-parameters-by-path \
@@ -118,6 +115,12 @@ write_runtime_env() {
 }
 
 ecr_login_and_pull() {
+  # if image already exists locally, skip ECR network entirely
+  if sudo docker image inspect "${ATTA_IMAGE}" >/dev/null 2>&1; then
+    log "Image already present locally: ${ATTA_IMAGE} (skip pull)"
+    return
+  fi
+
   local ecr_registry
   ecr_registry="$(echo "${ATTA_IMAGE}" | awk -F/ '{print $1}')"
   log "Login to ECR: ${ecr_registry} (region=${AWS_REGION})"
@@ -125,20 +128,6 @@ ecr_login_and_pull() {
   local login_password
   login_password="$(aws --region "${AWS_REGION}" ecr get-login-password)" || die "Failed to get ECR login password"
   sudo docker login --username AWS --password-stdin "${ecr_registry}" <<< "${login_password}"
-
-  local free_kb
-  free_kb="$(df --output=avail -k / | tail -1 | tr -d ' ')"
-  if (( free_kb < 1 * 1024 * 1024 )); then
-    log "WARN: Low disk space on /. Attempting Docker cleanup (images/build cache only)..."
-    sudo docker image prune -af >/dev/null 2>&1 || true
-    sudo docker builder prune -af >/dev/null 2>&1 || true
-    free_kb="$(df --output=avail -k / | tail -1 | tr -d ' ')"
-  fi
-
-  if (( free_kb < 1 * 1024 * 1024 )); then
-    df -h / 2>&1 | sudo tee -a "${LOG_FILE}" >&2 || true
-    die "Not enough free disk space on /. Need >= 1GB free."
-  fi
 
   log "Pull image: ${ATTA_IMAGE}"
   sudo docker pull "${ATTA_IMAGE}"
@@ -195,7 +184,7 @@ main() {
   ecr_login_and_pull
   install_and_restart_service
 
-  log "Done. Docker image pulled, unit installed, service restarted."
+  log "Done. Unit installed, service restarted."
 }
 
 main "$@"

@@ -12,9 +12,7 @@ EnvironmentFile=/opt/atta/state/runtime.env
 WorkingDirectory=/opt/atta
 
 ExecStartPre=-/usr/bin/docker rm -f atta
-ExecStartPre=/usr/bin/docker pull ${ATTA_IMAGE}
 
-# include runtime.env into container env
 ExecStart=/usr/bin/docker run --name atta --env-file /opt/atta/.env --env-file /opt/atta/state/runtime.env -v /opt/atta/state/output:/app/output ${ATTA_IMAGE} sh -lc "trap : TERM INT; sleep infinity & wait"
 
 ExecStop=/usr/bin/docker stop atta

@@ -6,7 +6,6 @@ die() {
   exit 1
 }
 
-# read a single field from a JSON payload passed via stdin
 json_field() {
   local key="$1"
 
@@ -31,7 +30,6 @@ print(payload.get(key, ""))
 PY
 }
 
-# required inputs (from workflow)
 TAG="${TAG:-}"
 INSTANCE_ID="${INSTANCE_ID:-}"
 AWS_REGION="${AWS_REGION:-}"
@@ -59,7 +57,6 @@ PARAMS_JSON="$(python deploy/render_ssm_payload.py \
   --ssm-path "${SSM_PATH}"
 )"
 
-# explicit --region to prevent drift
 COMMAND_ID="$(
   aws --region "${AWS_REGION}" ssm send-command \
     --instance-ids "${INSTANCE_ID}" \
@@ -72,21 +69,44 @@ COMMAND_ID="$(
 
 echo "SSM CommandId=${COMMAND_ID}"
 
-# bounded wait loop (prevents “hang until job timeout”)
-MAX_WAIT_SECONDS="${SSM_MAX_WAIT_SECONDS:-1800}"                                                                          # 30 min
+MAX_WAIT_SECONDS="${SSM_MAX_WAIT_SECONDS:-1800}"   # 30 min
 SLEEP_SECONDS="${SSM_POLL_SECONDS:-10}"
 
 START_TS="$(date +%s)"
 INVOCATION_JSON=""
 STATUS=""
+ITER=0
 
 while true; do
+  ITER=$((ITER + 1))
+
   if INVOCATION_JSON="$(aws --region "${AWS_REGION}" ssm get-command-invocation \
       --command-id "${COMMAND_ID}" \
       --instance-id "${INSTANCE_ID}" \
       --output json 2>/dev/null)"; then
 
     STATUS="$(json_field "Status" <<< "${INVOCATION_JSON}")"
+
+    # print progress every poll (so GH Actions doesn't look frozen)
+    NOW_TS="$(date +%s)"
+    ELAPSED="$((NOW_TS - START_TS))"
+    echo "[ssm] status=${STATUS:-unknown} elapsed=${ELAPSED}s"
+
+    # show tail of remote output while running (helps debug hangs)
+    if [[ "${STATUS}" != "Success" && "${STATUS}" != "Failed" && "${STATUS}" != "Cancelled" && "${STATUS}" != "TimedOut" ]]; then
+      if (( ITER % 3 == 0 )); then # every ~30s by default
+        OUT="$(json_field "StandardOutputContent" <<< "${INVOCATION_JSON}")"
+        ERR="$(json_field "StandardErrorContent" <<< "${INVOCATION_JSON}")"
+        if [[ -n "${OUT}" ]]; then
+          echo "----- remote stdout (tail) -----"
+          echo "${OUT}" | tail -n 30
+        fi
+        if [[ -n "${ERR}" ]]; then
+          echo "----- remote stderr (tail) -----"
+          echo "${ERR}" | tail -n 30
+        fi
+      fi
+    fi
 
     case "${STATUS}" in
       Success|Failed|Cancelled|TimedOut)
