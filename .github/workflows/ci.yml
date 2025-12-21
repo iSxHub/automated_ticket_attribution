@@ -5,6 +5,10 @@ on:
     branches: ["main", "dev"]
   pull_request:
 
+# enforce least-privilege defaults for CI
+permissions:
+  contents: read
+
 jobs:
   checks:
     runs-on: ubuntu-latest
@@ -12,7 +16,8 @@ jobs:
       PYTHONHASHSEED: "0"
 
     steps:
-      - uses: actions/checkout@v4
+      # pin checkout action to immutable commit for supply-chain safety
+      - uses: actions/checkout@8ade135a5563ccb1c637180fc5c3d1681a05c2b5
         with:
           # keep history available if needed later
           fetch-depth: 0

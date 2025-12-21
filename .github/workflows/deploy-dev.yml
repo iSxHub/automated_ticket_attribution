@@ -17,6 +17,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # bind this workflow to the protected dev environment
+    environment: dev
     env:
       PYTHONHASHSEED: "0"
 
@@ -34,7 +36,8 @@ jobs:
       SSM_PATH: ${{ vars.SSM_PATH || '/atta/dev' }}
 
     steps:
-      - uses: actions/checkout@v4
+      # pin checkout action to immutable commit for supply-chain safety
+      - uses: actions/checkout@8ade135a5563ccb1c637180fc5c3d1681a05c2b5
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -77,8 +80,9 @@ jobs:
           # NEW: already defaulted at job env
           echo "[deploy] ssm_path=${SSM_PATH}"
 
+      # pin AWS credential action to a specific commit
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@c5b1634c8e2847b1e6c5213c0fbb79cd4a463257
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -87,6 +91,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          
+          # retry helper to soften transient AWS/ECR failures
+          retry() {
+            local attempts="$1"; shift
+            local delay="$1"; shift
+
+            for attempt in $(seq 1 "${attempts}"); do
+              if "$@"; then
+                return 0
+              fi
+
+              echo "[retry] attempt ${attempt}/${attempts} failed; sleeping ${delay}s..." >&2
+              sleep "${delay}"
+            done
+
+            echo "[retry] command failed after ${attempts} attempts: $*" >&2
+            return 1
+          }
 
           # assert TAG exists (prevents unbound var explosions)
           : "${TAG:?Missing TAG}"
@@ -101,11 +123,12 @@ jobs:
           echo "[ecr] repo=${ECR_REPO}"
           echo "[ecr] image_uri=${IMAGE_URI}"
 
-          aws ecr get-login-password --region "${AWS_REGION}" \
-            | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+          # retry docker login to handle transient registry hiccups
+          retry 3 5 bash -c "aws ecr get-login-password --region '${AWS_REGION}' | docker login --username AWS --password-stdin '${ECR_REGISTRY}'"
 
           docker build -t "${IMAGE_URI}" .
-          docker push "${IMAGE_URI}"
+          # retry docker push for resilience against network blips
+          retry 3 10 docker push "${IMAGE_URI}"
 
           echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
 
@@ -116,8 +139,9 @@ jobs:
           chmod +x deploy/build_bundle.sh
           deploy/build_bundle.sh "${TAG}"
 
-      - name: Upload deploy bundle artifact (optional)
-        uses: actions/upload-artifact@v4
+      # pin artifact upload action to a specific commit
+      - name: Upload deploy bundle artifact
+        uses: actions/upload-artifact@c7d193f32edcb7bfad88892161225aeda64e9392
         with:
           name: deploy-bundle-${{ github.ref_name }}
           # include checksum artifact too
@@ -131,6 +155,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          
+          # retry helper to cushion transient S3/network errors
+          retry() {
+            local attempts="$1"; shift
+            local delay="$1"; shift
+
+            for attempt in $(seq 1 "${attempts}"); do
+              if "$@"; then
+                return 0
+              fi
+
+              echo "[retry] attempt ${attempt}/${attempts} failed; sleeping ${delay}s..." >&2
+              sleep "${delay}"
+            done
+
+            echo "[retry] command failed after ${attempts} attempts: $*" >&2
+            return 1
+          }
+          
           : "${TAG:?Missing TAG}"
           : "${AWS_REGION:?Missing vars.AWS_REGION}"
           : "${DEPLOY_BUCKET:?Missing vars.DEPLOY_BUCKET}"
@@ -138,13 +181,13 @@ jobs:
           BUCKET="${DEPLOY_BUCKET}"
 
           echo "[s3] uploading bundle to s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
-          aws --region "${AWS_REGION}" s3 cp \
+          retry 3 5 aws --region "${AWS_REGION}" s3 cp \
             "atta-${TAG}.tar.gz" \
             "s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
 
           # upload checksum next to the bundle
           echo "[s3] uploading checksum to s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz.sha256"
-          aws --region "${AWS_REGION}" s3 cp \
+          retry 3 5 aws --region "${AWS_REGION}" s3 cp \
             "atta-${TAG}.tar.gz.sha256" \
             "s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz.sha256"
 
