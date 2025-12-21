@@ -96,6 +96,14 @@ echo "Login to ECR: ${ECR_REGISTRY}"
 LOGIN_PASSWORD="$(aws ecr get-login-password --region "${AWS_REGION}")"
 sudo docker login --username AWS --password-stdin "${ECR_REGISTRY}" <<< "${LOGIN_PASSWORD}"
 
+# fail if less than 1GB free on /
+FREE_KB="$(df --output=avail -k / | tail -1 | tr -d ' ')"
+if (( FREE_KB < 1 * 1024 * 1024 )); then
+  echo "ERROR: Not enough free disk space on /. Need >= 1GB free." >&2
+  df -h /
+  exit 1
+fi
+
 echo "Pull image: ${ATTA_IMAGE}"
 sudo docker pull "${ATTA_IMAGE}"
 
