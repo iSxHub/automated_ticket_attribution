@@ -83,6 +83,7 @@ In short:
 
 ```text
 automated_ticket_attribution/
+  .github/
   app/
     cmd/
         main.py             # run app
@@ -90,11 +91,13 @@ automated_ticket_attribution/
     infrastructure/         # integrations
     application/            # use-cases
     shared/
+    deploy/
     config.py
   tests/
   output/
   requirements.txt
   requirements-dev.txt
+  Dockerfile
   LICENSE
   Makefile
   README.md
