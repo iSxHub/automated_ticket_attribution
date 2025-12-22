@@ -1,0 +1,228 @@
+name: deploy-dev
+
+on:
+  push:
+    tags:
+      - "*-dev"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: dev
+    env:
+      PYTHONHASHSEED: "0"
+      TAG: ${{ github.ref_name }}
+
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      ECR_REPO: ${{ vars.ECR_REPO }}
+      DEPLOY_BUCKET: ${{ vars.DEPLOY_BUCKET }}
+      DEV_EC2_INSTANCE_ID: ${{ vars.DEV_EC2_INSTANCE_ID }}
+
+      SSM_PATH: ${{ vars.SSM_PATH || '/atta/dev' }}
+
+    steps:
+      - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Ensure tag commit is on dev branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin dev --prune
+
+          TAG_COMMIT="$(git rev-parse HEAD)"
+          echo "[guard] tag=${TAG} commit=${TAG_COMMIT}"
+          echo "[guard] verifying commit is contained in origin/dev..."
+
+          if ! git merge-base --is-ancestor "${TAG_COMMIT}" "origin/dev"; then
+            echo "::error::Tag ${TAG} points to ${TAG_COMMIT}, which is NOT on origin/dev. Create the tag from dev." >&2
+            exit 1
+          fi
+
+      - name: Setup Python + deps
+        uses: ./.github/actions/setup-python-deps
+        with:
+          python-version: "3.10"
+
+      - name: Quality gates + reports
+        uses: ./.github/actions/ci-quality
+        with:
+          artifact-name: test-reports
+
+      - name: Log deploy context
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "[deploy] tag=${TAG}"
+          echo "[deploy] region=${AWS_REGION}"
+          echo "[deploy] ecr_repo=${ECR_REPO}"
+          echo "[deploy] bucket=${DEPLOY_BUCKET}"
+          echo "[deploy] instance=${DEV_EC2_INSTANCE_ID}"
+          echo "[deploy] ssm_path=${SSM_PATH}"
+
+#      - name: Get OIDC token (debug)
+#        id: oidc
+#        shell: bash
+#        run: |
+#          set -euo pipefail
+#
+#          raw="$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+#            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+#
+#          token="$(printf '%s' "$raw" | jq -r '.value // empty')"
+#          if [[ -z "$token" ]]; then
+#            echo "::error::OIDC token is empty. Response: $raw" >&2
+#            exit 1
+#          fi
+#
+#          echo "token=$token" >> "$GITHUB_OUTPUT"
+#
+#      - name: STS assume deploy role (debug)
+#        shell: bash
+#        env:
+#          TOKEN: ${{ steps.oidc.outputs.token }}
+#        run: |
+#          set -euo pipefail
+#          : "${TOKEN:?TOKEN is empty (previous step output missing)}"
+#
+#          aws sts assume-role-with-web-identity \
+#            --role-arn "arn:aws:iam::086100739031:role/atta-github-actions-deploy-dev" \
+#            --role-session-name "gha-debug-${GITHUB_RUN_ID}" \
+#            --web-identity-token "${TOKEN}" \
+#            --duration-seconds 900 \
+#            --output json
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build & push Docker image to ECR
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          retry() {
+            local attempts="$1"; shift
+            local delay="$1"; shift
+
+            for attempt in $(seq 1 "${attempts}"); do
+              if "$@"; then
+                return 0
+              fi
+
+              echo "[retry] attempt ${attempt}/${attempts} failed; sleeping ${delay}s..." >&2
+              sleep "${delay}"
+            done
+
+            echo "[retry] command failed after ${attempts} attempts: $*" >&2
+            return 1
+          }
+
+          : "${TAG:?Missing TAG}"
+          : "${AWS_ACCOUNT_ID:?Missing env AWS_ACCOUNT_ID}"
+          : "${ECR_REPO:?Missing env ECR_REPO}"
+          : "${AWS_REGION:?Missing env AWS_REGION}"
+
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPO}:${TAG}"
+
+          echo "[ecr] registry=${ECR_REGISTRY}"
+          echo "[ecr] repo=${ECR_REPO}"
+          echo "[ecr] image_uri=${IMAGE_URI}"
+
+          retry 3 5 bash -c "aws ecr get-login-password --region '${AWS_REGION}' | docker login --username AWS --password-stdin '${ECR_REGISTRY}'"
+
+          docker build -t "${IMAGE_URI}" .
+          retry 3 10 docker push "${IMAGE_URI}"
+
+          echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
+
+      - name: Package source (deploy bundle)
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x deploy/build_bundle.sh
+          deploy/build_bundle.sh "${TAG}"
+
+      - name: Upload deploy bundle artifact
+        uses: actions/upload-artifact@c7d193f32edcb7bfad88892161225aeda64e9392
+        with:
+          name: deploy-bundle-${{ github.ref_name }}
+          path: |
+            atta-${{ github.ref_name }}.tar.gz
+            atta-${{ github.ref_name }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload artifact to S3
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          retry() {
+            local attempts="$1"; shift
+            local delay="$1"; shift
+
+            for attempt in $(seq 1 "${attempts}"); do
+              if "$@"; then
+                return 0
+              fi
+
+              echo "[retry] attempt ${attempt}/${attempts} failed; sleeping ${delay}s..." >&2
+              sleep "${delay}"
+            done
+
+            echo "[retry] command failed after ${attempts} attempts: $*" >&2
+            return 1
+          }
+
+          : "${TAG:?Missing TAG}"
+          : "${AWS_REGION:?Missing vars.AWS_REGION}"
+          : "${DEPLOY_BUCKET:?Missing vars.DEPLOY_BUCKET}"
+
+          BUCKET="${DEPLOY_BUCKET}"
+
+          echo "[s3] uploading bundle to s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
+          retry 3 5 aws --region "${AWS_REGION}" s3 cp \
+            "atta-${TAG}.tar.gz" \
+            "s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
+
+          echo "[s3] uploading checksum to s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz.sha256"
+          retry 3 5 aws --region "${AWS_REGION}" s3 cp \
+            "atta-${TAG}.tar.gz.sha256" \
+            "s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz.sha256"
+
+      - name: Deploy on EC2 via SSM Run Command
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          chmod +x deploy/ssm_deploy.sh
+
+          export TAG="${TAG}"
+          export INSTANCE_ID="${DEV_EC2_INSTANCE_ID}"
+          export AWS_REGION="${AWS_REGION}"
+          export BUCKET="${DEPLOY_BUCKET}"
+          export ATTA_IMAGE="${IMAGE_URI}"
+          export SSM_PATH="${SSM_PATH}"
+
+          : "${INSTANCE_ID:?Missing vars.DEV_EC2_INSTANCE_ID}"
+          : "${AWS_REGION:?Missing vars.AWS_REGION}"
+          : "${ATTA_IMAGE:?Missing IMAGE_URI env (Build step failed?)}"
+          : "${BUCKET:?Missing vars.DEPLOY_BUCKET}"
+
+          deploy/ssm_deploy.sh

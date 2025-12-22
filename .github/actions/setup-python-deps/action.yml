@@ -1,0 +1,24 @@
+name: Setup Python + dependencies
+description: Setup Python, enable pip cache, then install deps via Makefile
+
+inputs:
+  python-version:
+    description: Python version
+    required: false
+    default: "3.10"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: pip
+        cache-dependency-path: |
+          requirements.txt
+          requirements-dev.txt
+
+    - shell: bash
+      run: |
+        set -euo pipefail
+        make setup-ci

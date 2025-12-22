@@ -1,6 +1,16 @@
+certifi==2025.11.12
+charset-normalizer==3.4.4
+idna==3.11
+python-dotenv==1.2.1
+requests==2.32.5
+urllib3==2.6.0
+pyyaml>=6.0
+google-genai>=1.0.0
+openpyxl>=3.1.5
 pytest
 ruff
 mypy
 types-requests
 types-PyYAML
 types-openpyxl
+pytest-cov

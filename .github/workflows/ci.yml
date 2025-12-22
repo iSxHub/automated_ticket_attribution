@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  push:
+    branches: ["main", "dev"]
+  pull_request:
+
+# enforce least-privilege defaults for CI
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONHASHSEED: "0"
+
+    steps:
+      # pin checkout action to immutable commit for supply-chain safety
+      - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b
+        with:
+          # keep history available if needed later
+          fetch-depth: 0
+
+      - name: Setup Python + deps
+        uses: ./.github/actions/setup-python-deps
+        with:
+          python-version: "3.10"
+
+      # centralized CI + artifacts (no unconditional reports upload warnings)
+      - name: Quality gates + reports
+        uses: ./.github/actions/ci-quality
+        with:
+          artifact-name: test-reports

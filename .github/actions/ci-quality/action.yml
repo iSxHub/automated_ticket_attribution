@@ -1,0 +1,50 @@
+name: CI quality gates + upload reports
+description: Run make ci, upload reports/ if present, and fail if CI failed.
+
+inputs:
+  artifact-name:
+    description: Artifact name for uploaded reports
+    required: false
+    default: test-reports
+
+outputs:
+  ci_exit_code:
+    description: Exit code of `make ci`
+    value: ${{ steps.run_ci.outputs.ci_exit_code }}
+
+runs:
+  using: composite
+  steps:
+    # run CI but do not stop the action early; capture exit code
+    - id: run_ci
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # NEW: correctly capture `make ci` exit code (don't lose it via `!`)
+        set +e
+        make ci
+        ci_exit_code=$?
+        set -e
+
+        echo "ci_exit_code=${ci_exit_code}" >> "$GITHUB_OUTPUT"
+
+    # upload only when reports exist
+    - name: Upload test reports
+      if: always() && hashFiles('reports/**') != ''
+      uses: actions/upload-artifact@c7d193f32edcb7bfad88892161225aeda64e9392
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: reports/
+        if-no-files-found: error
+        retention-days: 7
+
+    # fail after uploading artifacts
+    - name: Fail job if CI failed
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ "${{ steps.run_ci.outputs.ci_exit_code }}" != "0" ]]; then
+          echo "::error::Quality gates failed (make ci exit code ${{ steps.run_ci.outputs.ci_exit_code }})" >&2
+          exit 1
+        fi
