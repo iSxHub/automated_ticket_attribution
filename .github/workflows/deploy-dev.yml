@@ -108,6 +108,26 @@ jobs:
           python -c "import os,base64,json; t=os.environ['TOKEN']; p=t.split('.')[1]; p += '=' * (-len(p)%4); c=json.loads(base64.urlsafe_b64decode(p.encode())); \
           print('sub =', c.get('sub')); print('aud =', c.get('aud')); print('repository =', c.get('repository')); print('ref =', c.get('ref')); print('job_workflow_ref =', c.get('job_workflow_ref')); print('actor =', c.get('actor'))"
 
+      # Prove whether AWS allows this exact token to assume this exact role
+      - name: Debug STS AssumeRoleWithWebIdentity
+        shell: bash
+        env:
+          TOKEN: ${{ steps.get_token.outputs.token }}
+          ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+
+          echo "[debug] role_arn=${ROLE_ARN}"
+          echo "[debug] token_len=${#TOKEN}"
+
+          # This call requires NO AWS credentials; it will either return creds or a clear AccessDenied
+          aws sts assume-role-with-web-identity \
+            --role-arn "${ROLE_ARN}" \
+            --role-session-name "gha-debug-${GITHUB_RUN_ID}" \
+            --web-identity-token "${TOKEN}" \
+            --duration-seconds 900 \
+            --output json
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
         with:
