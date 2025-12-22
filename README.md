@@ -14,6 +14,7 @@ automatic classification of IT helpdesk tickets based on an IT Service Catalog.
 6. Send the report via SMTP to the configured recipient, including a link to the codebase.
 
 ### Additional features
+- Deploy dev: GitHub Actions workflow triggered by *-dev tags builds/pushes a Docker image to ECR, uploads a deploy bundle to S3, and deploys to the dev EC2 instance via SSM + systemd.
 - Idempotent report sending: scan `output/*.xlsx`, send any report not marked as sent in SQLite (oldest-first by mtime), and only then run the Helpdesk API + LLM pipeline.
 - Log all key steps via Python `logging` and provide a simple terminal progress indicator (spinner).
 - Covered by unit and integration tests and static checks (ruff, mypy).
@@ -54,7 +55,6 @@ In short:
 ## Potential future improvements
 
 - Package the pipeline into a Docker container and run it on a schedule (cron / n8n).
-- Add a Makefile workflow for deployment (e.g. `make deploy-prod`) using GitHub Actions.
 - Cache Service Catalog fetch (etag/if-modified-since) to reduce network and speed up runs.
 - Move all configuration (URLs, keys, batch sizes, email recipients, etc) into environment-based settings per environment (dev/stage/prod) (n8n).
 - Write logs to a file (log rotation), not only stdout. Logs in JSON.
@@ -132,13 +132,15 @@ make excel      # build example excel file
 ```
 ---
 ## How to deploy on AWS EC2
-### Make this file executable locally:
+### Make this files executable locally (optional, for local debugging):
 ```text
 chmod +x deploy/ec2_deploy.sh
 chmod +x deploy/build_bundle.sh
 chmod +x deploy/ssm_deploy.sh
 ```
-### Deploy dev
+### Deploy dev (GitHub Actions)
+make deploy-dev creates and pushes a *-dev tag (for example: 0.1.30-dev).
+That tag triggers the deploy-dev workflow: build/push image to ECR, upload bundle to S3, then deploy to EC2 via SSM + systemd.
 ```text
 make deploy-dev
 ```
