@@ -17,26 +17,20 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # bind this workflow to the protected dev environment
     environment: dev
     env:
       PYTHONHASHSEED: "0"
-
-      # define TAG once for the whole job (this workflow runs only on tags)
       TAG: ${{ github.ref_name }}
 
-      # expose AWS deployment inputs once for reuse across steps
       AWS_REGION: ${{ vars.AWS_REGION }}
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
       ECR_REPO: ${{ vars.ECR_REPO }}
       DEPLOY_BUCKET: ${{ vars.DEPLOY_BUCKET }}
       DEV_EC2_INSTANCE_ID: ${{ vars.DEV_EC2_INSTANCE_ID }}
 
-      # default once here; empty/undefined vars.SSM_PATH becomes /atta/dev
       SSM_PATH: ${{ vars.SSM_PATH || '/atta/dev' }}
 
     steps:
-      # pin checkout action to immutable commit for supply-chain safety
       - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b
         with:
           fetch-depth: 0
@@ -62,7 +56,6 @@ jobs:
         with:
           python-version: "3.10"
 
-      # centralized CI + artifacts
       - name: Quality gates + reports
         uses: ./.github/actions/ci-quality
         with:
@@ -77,10 +70,46 @@ jobs:
           echo "[deploy] ecr_repo=${ECR_REPO}"
           echo "[deploy] bucket=${DEPLOY_BUCKET}"
           echo "[deploy] instance=${DEV_EC2_INSTANCE_ID}"
-          # NEW: already defaulted at job env
           echo "[deploy] ssm_path=${SSM_PATH}"
 
-      # pin AWS credential action to a specific commit
+      # NEW: DEBUG OIDC CLAIMS (temporary). Add these two steps.
+      - name: Get OIDC token (debug)
+        id: get_token
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          raw="$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+
+          token="$(printf '%s' "$raw" | python - <<'PY'
+import json,sys
+print(json.load(sys.stdin)["value"])
+PY
+)"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Print OIDC claims (debug)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+import base64, json, os
+
+token = os.environ["TOKEN"]
+payload_b64 = token.split(".")[1]
+payload_b64 += "=" * (-len(payload_b64) % 4)
+claims = json.loads(base64.urlsafe_b64decode(payload_b64.encode()))
+
+for k in ["sub", "aud", "repository", "ref", "job_workflow_ref", "actor"]:
+    if k in claims:
+        print(f"{k} = {claims[k]}")
+PY
+        env:
+          TOKEN: ${{ steps.get_token.outputs.token }}
+      # END DEBUG
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
         with:
@@ -91,8 +120,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          
-          # retry helper to soften transient AWS/ECR failures
+
           retry() {
             local attempts="$1"; shift
             local delay="$1"; shift
@@ -110,7 +138,6 @@ jobs:
             return 1
           }
 
-          # assert TAG exists (prevents unbound var explosions)
           : "${TAG:?Missing TAG}"
           : "${AWS_ACCOUNT_ID:?Missing env AWS_ACCOUNT_ID}"
           : "${ECR_REPO:?Missing env ECR_REPO}"
@@ -123,11 +150,9 @@ jobs:
           echo "[ecr] repo=${ECR_REPO}"
           echo "[ecr] image_uri=${IMAGE_URI}"
 
-          # retry docker login to handle transient registry hiccups
           retry 3 5 bash -c "aws ecr get-login-password --region '${AWS_REGION}' | docker login --username AWS --password-stdin '${ECR_REGISTRY}'"
 
           docker build -t "${IMAGE_URI}" .
-          # retry docker push for resilience against network blips
           retry 3 10 docker push "${IMAGE_URI}"
 
           echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
@@ -139,12 +164,10 @@ jobs:
           chmod +x deploy/build_bundle.sh
           deploy/build_bundle.sh "${TAG}"
 
-      # pin artifact upload action to a specific commit
       - name: Upload deploy bundle artifact
         uses: actions/upload-artifact@c7d193f32edcb7bfad88892161225aeda64e9392
         with:
           name: deploy-bundle-${{ github.ref_name }}
-          # include checksum artifact too
           path: |
             atta-${{ github.ref_name }}.tar.gz
             atta-${{ github.ref_name }}.tar.gz.sha256
@@ -155,8 +178,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          
-          # retry helper to cushion transient S3/network errors
+
           retry() {
             local attempts="$1"; shift
             local delay="$1"; shift
@@ -173,7 +195,7 @@ jobs:
             echo "[retry] command failed after ${attempts} attempts: $*" >&2
             return 1
           }
-          
+
           : "${TAG:?Missing TAG}"
           : "${AWS_REGION:?Missing vars.AWS_REGION}"
           : "${DEPLOY_BUCKET:?Missing vars.DEPLOY_BUCKET}"
@@ -185,7 +207,6 @@ jobs:
             "atta-${TAG}.tar.gz" \
             "s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz"
 
-          # upload checksum next to the bundle
           echo "[s3] uploading checksum to s3://${BUCKET}/atta/${TAG}/atta-${TAG}.tar.gz.sha256"
           retry 3 5 aws --region "${AWS_REGION}" s3 cp \
             "atta-${TAG}.tar.gz.sha256" \
@@ -202,11 +223,7 @@ jobs:
           export INSTANCE_ID="${DEV_EC2_INSTANCE_ID}"
           export AWS_REGION="${AWS_REGION}"
           export BUCKET="${DEPLOY_BUCKET}"
-
-          # Read from env populated in ECR step
           export ATTA_IMAGE="${IMAGE_URI}"
-
-          # SSM_PATH already defaulted at job env level (no duplication here)
           export SSM_PATH="${SSM_PATH}"
 
           : "${INSTANCE_ID:?Missing vars.DEV_EC2_INSTANCE_ID}"
