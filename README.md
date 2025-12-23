@@ -80,44 +80,26 @@ In short:
 - Python 3.10+
 - `make` (recommended)
 
-### Setup
-
-1) Create and activate a virtual environment:
+### Setup and run
 
 ```bash
+# 1) Create and activate venv
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
-````
 
-2. Install dependencies:
-
-**Dev** (recommended for local run + tests + linters)
-
-```bash
+# 2) Install deps
+# 2.1) Dev (recommended for local work)
 pip install -r requirements-dev.txt
-```
-
-**Prod** (runtime only)
-
-```bash
+# 2.2) Prod (runtime only)
 pip install -r requirements.txt
-```
 
-3. Configure `.env`:
-
-```bash
+# 3) Create local .env
 cp env_local.example .env  # Windows: copy env_local.example .env
-```
 
-Open `.env` and fill required values.
-
-### How to run
-
-From the project root:
-
-```bash
+# 4) Run
 make run
-```
+````
+Open `.env` and fill required values before running.
 
 ---
 ## 📁 Structure
