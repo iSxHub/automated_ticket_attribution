@@ -78,7 +78,7 @@ In short:
 
 ### Requirements
 - Python 3.10+
-- `make` (recommended)
+- `make`
 
 ### Setup and run
 
