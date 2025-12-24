@@ -106,28 +106,28 @@ Open `.env` and fill required values before running.
 
 ```text
 automated_ticket_attribution/
-├── app/                  # Application source code
-│   ├── domain/           # Domain layer (pure business models/rules)
-│   ├── application/      # Use-cases + ports (interfaces)
-│   │   ├── dto/          # Use-case DTOs
-│   │   └── ports/        # Ports (interfaces) for infra adapters
-│   ├── infrastructure/   # Adapters/clients (HTTP/LLM/Excel/SMTP/config/etc.)
-│   │   └── email_templates/ # Email templates + builders
-│   ├── shared/           # Shared utilities (exceptions/helpers)
-│   └── cmd/              # Entrypoints (CLI wiring + pipeline runner)
+├── app/                        # Application source code
+│   ├── domain/                 # Domain layer (pure business models/rules)
+│   ├── application/            # Use-cases + ports (interfaces)
+│   │   ├── dto/                # Use-case DTOs
+│   │   └── ports/              # Ports (interfaces) for infra adapters
+│   ├── infrastructure/         # Adapters/clients (HTTP/LLM/Excel/SMTP/config/etc.)
+│   │   └── email_templates/    # Email templates + builders
+│   ├── shared/                 # Shared utilities (exceptions/helpers)
+│   └── cmd/                    # Entrypoints (CLI wiring + pipeline runner)
 │
-├── tests/                # Automated tests
-│   ├── unit/             # Unit tests
-│   └── integration/      # Integration tests
+├── tests/                      # Automated tests
+│   ├── unit/                   # Unit tests
+│   └── integration/            # Integration tests
 │
-├── deploy/               # Deployment tooling (AWS EC2 / SSM)
-│   └── systemd/          # systemd unit files
+├── deploy/                     # Deployment tooling (AWS EC2 / SSM)
+│   └── systemd/                # systemd unit files
 │
-├── .github/              # CI/CD
-│   ├── actions/          # Composite actions
-│   └── workflows/        # GitHub Actions workflows
+├── .github/                    # CI/CD
+│   ├── actions/                # Composite actions
+│   └── workflows/              # GitHub Actions workflows
 │
-└── output/               # Generated artifacts (reports, db, etc.)
+└── output/                     # Generated artifacts (reports, db, etc.)
 ```
 ---
 
