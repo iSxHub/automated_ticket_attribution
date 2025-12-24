@@ -57,7 +57,6 @@ In short:
 ---
 ## 🛣️ Potential future improvements
 
-- Package the pipeline into a Docker container and run it on a schedule (cron / n8n).
 - Cache Service Catalog fetch (etag/if-modified-since) to reduce network and speed up runs.
 - Move all configuration (URLs, keys, batch sizes, email recipients, etc) into environment-based settings per environment (dev/stage/prod) (n8n).
 - Write logs to a file (log rotation), not only stdout. Logs in JSON.
