@@ -7,7 +7,9 @@ Automated pipeline that matches and classifies IT helpdesk tickets against an IT
 ---
 ## 🧩 Features / Pipeline overview
 
-### Task
+Full requirements: [`TASK.md`](TASK.md)
+
+### Completed as part of the task
 1. Fetch helpdesk requests from the webhook endpoint using API key + secret.
 2. Fetch the Service Catalog (YAML) from a remote URL.
 3. Batch requests to the LLM (configurable batch size, default 30).
@@ -15,9 +17,9 @@ Automated pipeline that matches and classifies IT helpdesk tickets against an IT
 5. Generate a sorted Excel report with formatting.
 6. Send the report via SMTP to the configured recipient, including a link to the codebase.
 
-### Additional features
-- Deploy dev: GitHub Actions workflow triggered by *-dev tags builds/pushes a Docker image to ECR, uploads a deploy bundle to S3, and deploys to the dev EC2 instance via SSM + systemd.
-- Manual run via self-hosted n8n on the EC2: a workflow runs the pipeline on demand through SSH, prevents double-runs with `flock`, streams logs to n8n, and persists them to `/var/log/atta-manual-run.log` (with a “tail last logs” step).
+### Done in addition
+- Deploy dev: GitHub Actions workflow triggered by *-dev tags builds/pushes a Docker image to AWS ECR, uploads a deploy bundle to AWS S3, and deploys to the dev AWS EC2 instance via AWS SSM + systemd.
+- Manual run via self-hosted n8n on the AWS EC2: a workflow runs the pipeline on demand through SSH, prevents double-runs with `flock`, streams logs to n8n, and persists them to `/var/log/atta-manual-run.log` (with a “tail last logs” step).
 - Idempotent report sending: scan `output/*.xlsx`, send any report not marked as sent in SQLite (oldest-first by mtime), and only then run the Helpdesk API + LLM pipeline.
 - Log all key steps via Python `logging` and provide a simple terminal progress indicator (spinner).
 - Covered by unit and integration tests and static checks (ruff, mypy).
@@ -44,16 +46,6 @@ This project makes a few pragmatic assumptions about the Service Catalog and LLM
 For a detailed discussion (including Jira vs Zoom classification, idempotency, error handling,
 and security considerations), see [`DESIGN_NOTES.md`](DESIGN_NOTES.md).
 
-In short:
-
-- `SaaS Platform Access (Jira/Salesforce)` is treated as specific to Jira and Salesforce,
-  not as a generic bucket for all SaaS tools.
-- Jira/Salesforce incidents (including outages like "Jira is down") are mapped to
-  `Software & Licensing / SaaS Platform Access (Jira/Salesforce)` with the catalog SLA (8 hours).
-- Zoom is not present in the Service Catalog. For the "Zoom not working" request, the long
-  description says "Camera isn't detected in Zoom". I treat this as an endpoint/device/configuration
-  issue (camera/drivers/permissions) rather than a SaaS availability or access problem, so it is
-  classified as `Software & Licensing / Other Software Issue` with SLA 24 hours.
 ---
 ## 🛣️ Potential future improvements
 
@@ -73,6 +65,7 @@ In short:
   - service health (up/down),
   - number of reports sent per day,
   - recipients distribution per day.
+
 ---
 ## 🚀 Quick start
 
