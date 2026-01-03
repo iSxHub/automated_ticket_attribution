@@ -45,6 +45,7 @@ Full requirements: [`TASK.md`](TASK.md)
 This project makes a few pragmatic assumptions about the Service Catalog and LLM behavior.
 For a detailed discussion (including Jira vs Zoom classification, idempotency, error handling,
 and security considerations), see [`DESIGN_NOTES.md`](DESIGN_NOTES.md).
+
 ---
 ## 🛣️ Potential future improvements
 
