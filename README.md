@@ -7,7 +7,9 @@ Automated pipeline that matches and classifies IT helpdesk tickets against an IT
 ---
 ## 🧩 Features / Pipeline overview
 
-### Task
+Full requirements: [`TASK.md`](TASK.md)
+
+### Completed as part of the task
 1. Fetch helpdesk requests from the webhook endpoint using API key + secret.
 2. Fetch the Service Catalog (YAML) from a remote URL.
 3. Batch requests to the LLM (configurable batch size, default 30).
@@ -15,8 +17,9 @@ Automated pipeline that matches and classifies IT helpdesk tickets against an IT
 5. Generate a sorted Excel report with formatting.
 6. Send the report via SMTP to the configured recipient, including a link to the codebase.
 
-### Additional features
-- Deploy dev: GitHub Actions workflow triggered by *-dev tags builds/pushes a Docker image to ECR, uploads a deploy bundle to S3, and deploys to the dev EC2 instance via SSM + systemd.
+### In addition
+- Deploy dev: GitHub Actions workflow triggered by *-dev tags builds/pushes a Docker image to AWS ECR, uploads a deploy bundle to AWS S3, and deploys to the dev AWS EC2 instance via AWS SSM + systemd.
+- Manual run via self-hosted n8n on the AWS EC2: a workflow runs the pipeline on demand through SSH, prevents double-runs with `flock`, streams logs to n8n, and persists them to `/var/log/atta-manual-run.log` (with a “tail last logs” step).
 - Idempotent report sending: scan `output/*.xlsx`, send any report not marked as sent in SQLite (oldest-first by mtime), and only then run the Helpdesk API + LLM pipeline.
 - Log all key steps via Python `logging` and provide a simple terminal progress indicator (spinner).
 - Covered by unit and integration tests and static checks (ruff, mypy).
@@ -37,26 +40,9 @@ Automated pipeline that matches and classifies IT helpdesk tickets against an IT
 - SMTP sender validates attachments exist, logs total attachment size, supports TLS (`starttls`) toggle.
 
 ---
-## ❓ Assumptions and open questions based on the task
 
-This project makes a few pragmatic assumptions about the Service Catalog and LLM behavior.
-For a detailed discussion (including Jira vs Zoom classification, idempotency, error handling,
-and security considerations), see [`DESIGN_NOTES.md`](DESIGN_NOTES.md).
-
-In short:
-
-- `SaaS Platform Access (Jira/Salesforce)` is treated as specific to Jira and Salesforce,
-  not as a generic bucket for all SaaS tools.
-- Jira/Salesforce incidents (including outages like "Jira is down") are mapped to
-  `Software & Licensing / SaaS Platform Access (Jira/Salesforce)` with the catalog SLA (8 hours).
-- Zoom is not present in the Service Catalog. For the "Zoom not working" request, the long
-  description says "Camera isn't detected in Zoom". I treat this as an endpoint/device/configuration
-  issue (camera/drivers/permissions) rather than a SaaS availability or access problem, so it is
-  classified as `Software & Licensing / Other Software Issue` with SLA 24 hours.
----
 ## 🛣️ Potential future improvements
 
-- Package the pipeline into a Docker container and run it on a schedule (cron / n8n).
 - Cache Service Catalog fetch (etag/if-modified-since) to reduce network and speed up runs.
 - Move all configuration (URLs, keys, batch sizes, email recipients, etc) into environment-based settings per environment (dev/stage/prod) (n8n).
 - Write logs to a file (log rotation), not only stdout. Logs in JSON.
@@ -73,79 +59,62 @@ In short:
   - service health (up/down),
   - number of reports sent per day,
   - recipients distribution per day.
+
 ---
 ## 🚀 Quick start
 
 ### Requirements
 - Python 3.10+
-- `make` (recommended)
+- `make`
 
-### Setup
-
-1) Create and activate a virtual environment:
+### Setup and run
 
 ```bash
+# 1) Create and activate venv
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
-````
 
-2. Install dependencies:
-
-**Dev** (recommended for local run + tests + linters)
-
-```bash
+# 2) Install deps
+# 2.1) Dev (recommended for local work)
 pip install -r requirements-dev.txt
-```
-
-**Prod** (runtime only)
-
-```bash
+# 2.2) Prod (runtime only)
 pip install -r requirements.txt
-```
 
-3. Configure `.env`:
-
-```bash
+# 3) Create local .env
 cp env_local.example .env  # Windows: copy env_local.example .env
-```
 
-Open `.env` and fill required values.
-
-### How to run
-
-From the project root:
-
-```bash
+# 4) Run
 make run
-```
+````
+Open `.env` and fill required values before running.
 
 ---
 ## 📁 Structure
 
 ```text
 automated_ticket_attribution/
-├── app/                  # Application source code
-│   ├── domain/           # Domain layer (pure business models/rules)
-│   ├── application/      # Use-cases + ports (interfaces)
-│   │   ├── dto/          # Use-case DTOs
-│   │   └── ports/        # Ports (interfaces) for infra adapters
-│   ├── infrastructure/   # Adapters/clients (HTTP/LLM/Excel/SMTP/config/etc.)
-│   │   └── email_templates/ # Email templates + builders
-│   ├── shared/           # Shared utilities (exceptions/helpers)
-│   └── cmd/              # Entrypoints (CLI wiring + pipeline runner)
+├── app/                        # Application source code
+│   ├── domain/                 # Domain layer (pure business models/rules)
+│   ├── application/            # Use-cases + ports (interfaces)
+│   │   ├── dto/                # Use-case DTOs
+│   │   └── ports/              # Ports (interfaces) for infra adapters
+│   ├── infrastructure/         # Adapters/clients (HTTP/LLM/Excel/SMTP/config/etc.)
+│   │   └── email_templates/    # Email templates + builders
+│   ├── shared/                 # Shared utilities (exceptions/helpers)
+│   └── cmd/                    # Entrypoints (CLI wiring + pipeline runner)
 │
-├── tests/                # Automated tests
-│   ├── unit/             # Unit tests
-│   └── integration/      # Integration tests
+├── tests/                      # Automated tests
+│   ├── unit/                   # Unit tests
+│   └── integration/            # Integration tests
 │
-├── deploy/               # Deployment tooling (AWS EC2 / SSM)
-│   └── systemd/          # systemd unit files
+├── deploy/                     # Deployment tooling (AWS EC2 / SSM)
+│   └── systemd/                # systemd unit files
 │
-├── .github/              # CI/CD
-│   ├── actions/          # Composite actions
-│   └── workflows/        # GitHub Actions workflows
+├── .github/                    # CI/CD
+│   ├── actions/                # Composite actions
+│   └── workflows/              # GitHub Actions workflows
 │
-└── output/               # Generated artifacts (reports, db, etc.)
+└── output/                     # Generated artifacts (reports, db, etc.)
 ```
 ---
 
@@ -196,6 +165,36 @@ make deploy-dev
 ```
 
 More details: [`deploy/README.md`](deploy/README.md)
+
+---
+## ▶️ Manual run via n8n (self-hosted on EC2)
+
+The workflow triggers the pipeline inside the already-running `atta` Docker container via `docker exec`.
+
+### Connect to n8n UI from your local machine (SSH tunnel)
+
+n8n is bound to localhost (`127.0.0.1:5678`) and is not exposed publicly.
+
+On local machine:
+```bash
+ssh -i path_to_ssh_key -L 5678:127.0.0.1:5678 root@<EC2_PUBLIC_IP>
+```
+
+Open in web browser:
+```bash
+http://localhost:5678
+```
+
+**Workflow: “atta service (start)”**
+
+Nodes:
+
+1) Manual Trigger
+2) SSH → Execute Command (container status check)
+3) SSH → Execute Command (run pipeline + prevent double runs + persist logs)
+4) SSH → Execute Command (show last logs)
+
+Note: nodes 2–4 run on the EC2 host using SSH credentials configured in n8n.
 
 ---
 ## 🧰 Tech stack
