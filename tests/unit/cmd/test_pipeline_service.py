@@ -94,8 +94,9 @@ def test_run_pipeline_happy_path(monkeypatch, tmp_path) -> None:
         email_body_builder=FakeEmailBodyBuilder(),
         report_exporter=fake_exporter,
         email_sender=fake_email_sender,
-        codebase_url="https://github.com/Steaxy/automated_ticket_attribution",
+        codebase_url="https://github.com/iSxHub/automated_ticket_attribution",
         candidate_name="John Doe",
+        email_title="Tasks report"
     )
 
     def fake_collect_unsent_reports(*args, **kwargs):
@@ -136,8 +137,8 @@ def test_run_pipeline_happy_path(monkeypatch, tmp_path) -> None:
     assert len(fake_email_sender.calls) == 1
 
     subject, body, attachments, html_body = fake_email_sender.calls[0]
-    assert subject == "Automation Engineer interview - technical task - John Doe"
-    assert "https://github.com/Steaxy/automated_ticket_attribution" in body
+    assert subject == "Tasks report - John Doe"
+    assert "https://github.com/iSxHub/automated_ticket_attribution" in body
 
     # _send_report resolves paths -> should be resolved
     assert attachments == [report_path.resolve()]
@@ -168,6 +169,7 @@ def test_run_pipeline_sends_unsent_reports(monkeypatch, tmp_path) -> None:
         email_sender=fake_email_sender,
         codebase_url="https://github.com/Steaxy/automated_ticket_attribution",
         candidate_name="John Doe",
+        email_title="Tasks report"
     )
 
     unsent1 = tmp_path / "unsent1.xlsx"
@@ -198,7 +200,7 @@ def test_run_pipeline_sends_unsent_reports(monkeypatch, tmp_path) -> None:
     assert len(fake_email_sender.calls) == 1
     subject, body, attachments, html_body = fake_email_sender.calls[0]
 
-    assert subject == "Automation Engineer interview - technical task - John Doe"
+    assert subject == "Tasks report - John Doe"
     assert set(attachments) == {unsent1.resolve(), unsent2.resolve()}
 
     # and both should be marked as sent

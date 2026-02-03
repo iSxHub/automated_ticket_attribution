@@ -94,6 +94,8 @@ def load_email_config() -> EmailConfig:
     sender = os.getenv("EMAIL_SENDER", username)
     recipient = _get_required_env("EMAIL_RECIPIENT")
     candidate_name = _get_required_env("CANDIDATE_NAME")
+    codebase_url = _get_required_env("CODEBASE_URL")
+    email_title = _get_required_env("EMAIL_TITLE")
 
     return EmailConfig(
         smtp_host=smtp_host,
@@ -104,6 +106,8 @@ def load_email_config() -> EmailConfig:
         sender=sender,
         recipient=recipient,
         candidate_name=candidate_name,
+        codebase_url=codebase_url,
+        email_title=email_title,
     )
 
 def load_report_log_config() -> ReportLogConfig:

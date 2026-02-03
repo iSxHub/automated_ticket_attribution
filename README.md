@@ -5,11 +5,13 @@ Automated pipeline that matches and classifies IT helpdesk tickets against an IT
 **Architecture:** Clean Architecture (Domain / Application / Infrastructure / Entrypoint).
 
 ---
+
 ## 🧩 Features / Pipeline overview
 
 Full requirements: [`TASK.md`](TASK.md)
 
 ### Completed as part of the task
+
 1. Fetch helpdesk requests from the webhook endpoint using API key + secret.
 2. Fetch the Service Catalog (YAML) from a remote URL.
 3. Batch requests to the LLM (configurable batch size, default 30).
@@ -18,6 +20,7 @@ Full requirements: [`TASK.md`](TASK.md)
 6. Send the report via SMTP to the configured recipient, including a link to the codebase.
 
 ### In addition
+
 - Deploy dev: GitHub Actions workflow triggered by *-dev tags builds/pushes a Docker image to AWS ECR, uploads a deploy bundle to AWS S3, and deploys to the dev AWS EC2 instance via AWS SSM + systemd.
 - Manual run via self-hosted n8n on the AWS EC2: a workflow runs the pipeline on demand through SSH, prevents double-runs with `flock`, streams logs to n8n, and persists them to `/var/log/atta-manual-run.log` (with a “tail last logs” step).
 - Idempotent report sending: scan `output/*.xlsx`, send any report not marked as sent in SQLite (oldest-first by mtime), and only then run the Helpdesk API + LLM pipeline.
@@ -61,6 +64,7 @@ Full requirements: [`TASK.md`](TASK.md)
   - recipients distribution per day.
 
 ---
+
 ## 🚀 Quick start
 
 ### Requirements
@@ -85,10 +89,12 @@ cp env_local.example .env  # Windows: copy env_local.example .env
 
 # 4) Run
 make run
-````
+```
+
 Open `.env` and fill required values before running.
 
 ---
+
 ## 📁 Structure
 
 ```text
@@ -141,14 +147,16 @@ The project follows **Clean Architecture** and runs as a single **CLI pipeline**
 **Flow:** send unsent reports → else fetch tickets → load Service Catalog → LLM classify → enrich SLA → export Excel → email report → log status (SQLite).
 
 ---
+
 ## ☁️ Dev deployment (GitHub Actions to EC2 via SSM)
 
 ### Make deploy scripts executable (optional, only for running locally)
+
 ```bash
 chmod +x deploy/ec2_deploy.sh
 chmod +x deploy/build_bundle.sh
 chmod +x deploy/ssm_deploy.sh
-````
+```
 
 ### Deploy dev (GitHub Actions)
 
@@ -167,6 +175,7 @@ make deploy-dev
 More details: [`deploy/README.md`](deploy/README.md)
 
 ---
+
 ## ▶️ Manual run via n8n (self-hosted on EC2)
 
 The workflow triggers the pipeline inside the already-running `atta` Docker container via `docker exec`.
@@ -176,11 +185,13 @@ The workflow triggers the pipeline inside the already-running `atta` Docker cont
 n8n is bound to localhost (`127.0.0.1:5678`) and is not exposed publicly.
 
 On local machine:
+
 ```bash
 ssh -i path_to_ssh_key -L 5678:127.0.0.1:5678 root@<EC2_PUBLIC_IP>
 ```
 
 Open in web browser:
+
 ```bash
 http://localhost:5678
 ```
@@ -197,6 +208,7 @@ Nodes:
 Note: nodes 2–4 run on the EC2 host using SSH credentials configured in n8n.
 
 ---
+
 ## 🧰 Tech stack
 
 - **Language:** Python 3.10+
@@ -215,6 +227,7 @@ Note: nodes 2–4 run on the EC2 host using SSH credentials configured in n8n.
 - **Type checking:** `mypy`
 
 ---
+
 ## 📄 License
 
 Source-available, non-commercial.  

@@ -38,6 +38,8 @@ class EmailConfig:
     sender: str
     recipient: str
     candidate_name: str
+    codebase_url: str
+    email_title: str
 
 # db
 @dataclass(frozen=True)
