@@ -34,6 +34,7 @@ class PipelineDeps:
     email_sender: ReportEmailSenderPort
     codebase_url: str
     candidate_name: str
+    email_title: str
 
 def run_pipeline(deps: PipelineDeps, explicit_report_path: str | None = None) -> None:
     project_root = deps.project_root
@@ -60,6 +61,7 @@ def run_pipeline(deps: PipelineDeps, explicit_report_path: str | None = None) ->
                 deps.email_sender,
                 deps.codebase_url,
                 deps.candidate_name,
+                deps.email_title,
             )
         except EmailSendError as exc:
             logger.error("Failed to send report email: %s", exc)
@@ -110,6 +112,7 @@ def run_pipeline(deps: PipelineDeps, explicit_report_path: str | None = None) ->
             deps.email_sender,
             deps.codebase_url,
             deps.candidate_name,
+            deps.email_title,
         )
     except EmailSendError as exc:
         logger.error("Failed to send report email: %s", exc)

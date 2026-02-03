@@ -48,6 +48,7 @@ def _send_report(
     email_sender: ReportEmailSenderPort,
     codebase_url: str,
     candidate_name: str,
+    email_title: str,
 ) -> None:
     """Send one or more report files via injected ports and mark them as sent."""
 
@@ -66,6 +67,7 @@ def _send_report(
         attachment_paths=attachment_paths,
         codebase_url=codebase_url,
         candidate_name=candidate_name,
+        email_title=email_title,
     )
 
     # mark the resolved paths as sent

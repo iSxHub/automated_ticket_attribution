@@ -13,8 +13,9 @@ def send_report(
     attachment_paths: list[Path],
     codebase_url: str,
     candidate_name: str,
+    email_title: str,
 ) -> None:
-    subject = f"Automation Engineer interview - technical task - {candidate_name}"
+    subject = f"{email_title} - {candidate_name}"
 
     text_body, html_body = body_builder.build(
         codebase_url=codebase_url,

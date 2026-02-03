@@ -37,6 +37,7 @@ def test_send_report(tmp_path: Path) -> None:
     body_builder = FakeEmailBodyBuilder()
     codebase_url = "https://github.com/Steaxy/automated_ticket_attribution"
     candidate_name = "John Doe"
+    email_title = "Tasks report"
 
     send_report(
         email_sender=sender,
@@ -44,6 +45,7 @@ def test_send_report(tmp_path: Path) -> None:
         attachment_paths=[report_file],
         codebase_url=codebase_url,
         candidate_name=candidate_name,
+        email_title=email_title,
     )
 
     # then
@@ -51,7 +53,7 @@ def test_send_report(tmp_path: Path) -> None:
 
     subject, body, attachments, html_body = sender.calls[0]
 
-    assert subject == "Automation Engineer interview - technical task - John Doe"
+    assert subject == "Tasks report - John Doe"
     assert codebase_url in body
     assert "Please find attached the classified helpdesk requests report." in body
     assert "Best regards," in body

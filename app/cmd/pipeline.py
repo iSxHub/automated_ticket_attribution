@@ -7,6 +7,7 @@ from app.infrastructure.config_loader import (
     load_service_catalog_config,
     load_llm_config,
     load_report_log_config,
+    load_email_config,
 )
 from app.infrastructure.service_catalog_client import ServiceCatalogClient
 from app.infrastructure.llm_classifier import LLMClassifier
@@ -15,7 +16,6 @@ from app.infrastructure.report_log import SQLiteReportLog
 from app.cmd.pipeline_service import run_pipeline, PipelineDeps
 from app.infrastructure.email_templates.email_body_builder import TemplateEmailBodyBuilder
 from app.infrastructure.report_exporter_excel import ExcelReportExporter
-from app.infrastructure.config_loader import load_email_config
 from app.infrastructure.email_sender import SMTPSender
 from app.infrastructure.helpdesk_client_request_provider import HelpdeskClientRequestProvider
 
@@ -66,8 +66,9 @@ def _build_pipeline_deps() -> PipelineDeps:
         email_body_builder=email_body_builder,
         report_exporter=report_exporter,
         email_sender=email_sender,
-        codebase_url="https://github.com/Steaxy/automated_ticket_attribution",
+        codebase_url=email_config.codebase_url,
         candidate_name=email_config.candidate_name,
+        email_title=email_config.email_title,
     )
 
 def pipeline(explicit_report_path: str | None = None) -> None:
