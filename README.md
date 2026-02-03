@@ -172,7 +172,7 @@ That tag triggers the `deploy-dev` workflow:
 make deploy-dev
 ```
 
-More details: [`deploy/README.md`](deploy/README.md)
+More details: [`docs/deploy/README.md`](docs/deploy/README.md)
 
 ---
 
