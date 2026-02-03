@@ -2,7 +2,7 @@
 
 Automated pipeline that matches and classifies IT helpdesk tickets against an IT Service Catalog using an LLM, then generates and emails a report.
 
-**Architecture:** Clean Architecture (Domain / Application / Infrastructure / Entrypoint).
+**Architecture:** Clean Architecture (Domain / Application / Infrastructure / Entrypoint). More details: [`docs/architecture/README.md`](docs/architecture/README.md)
 
 ---
 
